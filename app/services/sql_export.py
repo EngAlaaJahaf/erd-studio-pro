@@ -179,7 +179,24 @@ def generate_ddl(tables_data, fk_list, dialect="mysql", include_drop=True, separ
                 f"({', '.join(_ident(dialect, c) for c in parent_cols)})"
             )
         lines.append(",\n".join(body_lines))
-        lines.append(");")
+        table_comment = data.get("comment") or data.get("description")
+        if dialect == "mysql" and table_comment:
+            escaped_t = str(table_comment).replace("'", "''")
+            lines.append(f") COMMENT = '{escaped_t}';")
+        else:
+            lines.append(");")
+
+        # Column & Table Comments (Oracle, PostgreSQL, ANSI)
+        if dialect in ("oracle", "postgres", "ansi"):
+            if table_comment:
+                escaped_t = str(table_comment).replace("'", "''")
+                lines.append(f"COMMENT ON TABLE {_table_ident(dialect, t)} IS '{escaped_t}';")
+            for col in data.get("columns", []):
+                col_cmt = col.get("comment") or col.get("description")
+                if col_cmt and col_cmt != "-":
+                    escaped_c = str(col_cmt).replace("'", "''")
+                    lines.append(f"COMMENT ON COLUMN {_table_ident(dialect, t)}.{_ident(dialect, col['name'])} IS '{escaped_c}';")
+
         parts[t] = "\n".join(lines)
 
     if separately:

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from app.main import SchemaExportRequest, export_schema, dictionary_from_schema
 
-html = (ROOT / 'static/index.html').read_text(encoding='utf-8')
+html = (ROOT / 'static/js/app.js').read_text(encoding='utf-8')
 function = html[html.index('function currentDiagramSchema('):html.index('async function exportSchema(')]
 js = '''
 let tablesData, selectedTables, fkList;

@@ -61,7 +61,8 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
         ws = wb.create_sheet(title=tname[:31])
 
         # Row 0: Table title
-        ws["A1"] = f"{tname}"
+        t_comment = data.get("comment") or data.get("description")
+        ws["A1"] = f"{tname} - {t_comment}" if t_comment else f"{tname}"
         ws["A1"].font = _TITLE_FONT
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=15)
 
@@ -86,23 +87,27 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
             cname = col.get("name", "")
             base, params = _split_type(col.get("type", ""))
             parent = fk_map.get((tname, cname), "")
+            caption = col.get("caption") if (col.get("caption") and col.get("caption") != "-") else (col.get("comment") or "-")
+            description = col.get("description") if (col.get("description") and col.get("description") != "-") else (col.get("comment") or "-")
+            unique_mark = "✓" if col.get("unique") else ""
+            default_val = col.get("default_value") or "-"
 
             row_vals = [
                 ri,                                         # #
                 cname,                                      # Field name
-                "-",                                        # Caption (not available from SQL)
+                caption,                                    # Caption / prompt
                 base,                                       # Data type
                 params if params else "-",                  # Length
                 "✓" if cname in pks else "",                # PK
                 "✓" if not col.get("nullable", True) else "",  # M
-                "",                                         # U (not tracked)
+                unique_mark,                                # U
                 "",                                         # I (not tracked)
                 "✓" if parent else "",                      # FK
                 f"{parent}({cname})" if parent else "-",   # References
-                "-",                                        # check
+                col.get("check") or "-",                    # check
                 "Hidden" if cname in pks else "Text",       # Field Status
-                "-",                                        # Default
-                "-",                                        # Description
+                default_val,                                # Default
+                description,                                # Description
             ]
             row_num = ri + 3  # header rows 2+3 (1-indexed)
             for ci, val in enumerate(row_vals, start=1):

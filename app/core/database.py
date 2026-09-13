@@ -207,6 +207,17 @@ def save_all_table_states(positions, hidden_cols=None, visible_tables=None):
     hidden_cols = hidden_cols or {}
     visible_set = set(visible_tables) if visible_tables is not None else None
 
+    # Prune obsolete tables from table_states if schema is known
+    cached_row = conn.execute("SELECT tables_data_json FROM schema_cache WHERE id=1").fetchone()
+    if cached_row and cached_row[0]:
+        try:
+            valid_set = set(json.loads(cached_row[0]).keys())
+            if valid_set:
+                placeholders = ','.join('?' for _ in valid_set)
+                conn.execute(f"DELETE FROM table_states WHERE table_name NOT IN ({placeholders})", list(valid_set))
+        except Exception:
+            pass
+
     for tbl, pos in positions.items():
         x = pos.get("x", 100)
         y = pos.get("y", 100)

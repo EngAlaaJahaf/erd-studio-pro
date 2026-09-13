@@ -14,22 +14,34 @@ import re
 import requests
 
 from app.core import database as db
+from app.ai.ai_assistant import _get_opencode_headers
 
 
 def _config():
     s = db.get_all_settings()
+    provider = (s.get("ai_provider") or "local").strip().lower()
+    raw_base = s.get("ai_base_url", "")
+    raw_model = s.get("ai_model", "")
+    if provider == "opencode":
+        base_url = raw_base if (raw_base and "openai.com" not in raw_base) else "https://opencode.ai/zen/v1"
+        model = raw_model if (raw_model and raw_model != "gpt-4o-mini") else "big-pickle"
+    else:
+        base_url = raw_base or "https://api.openai.com/v1"
+        model = raw_model or "gpt-4o-mini"
     return {
-        "provider": (s.get("ai_provider") or "local").strip().lower(),
-        "base_url": (s.get("ai_base_url") or "https://api.openai.com/v1").rstrip("/"),
+        "provider": provider,
+        "base_url": base_url.rstrip("/"),
         "api_key": (s.get("ai_api_key") or "").strip(),
-        "model": s.get("ai_model") or "gpt-4o-mini",
+        "model": model,
         "temperature": float(s.get("ai_temperature") or 0.1),
     }
 
 
 def is_ai_available():
     cfg = _config()
-    return cfg["provider"] == "cloud" and bool(cfg["api_key"]) and bool(cfg["base_url"])
+    if cfg["provider"] == "opencode":
+        return True
+    return cfg["provider"] in ("cloud", "openai") and bool(cfg["api_key"]) and bool(cfg["base_url"])
 
 
 def _build_prompt(tables_data, fk_list):
@@ -88,7 +100,13 @@ def _extract_json(text):
 def classify_schema(tables_data, fk_list):
     """Returns {"subsystems": [...defs], "mapping": {...}} or None on failure."""
     cfg = _config()
-    if cfg["provider"] != "cloud" or not cfg["api_key"]:
+    if cfg["provider"] == "opencode":
+        headers = _get_opencode_headers()
+        timeout = 30
+    elif cfg["provider"] in ("cloud", "openai") and cfg["api_key"]:
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {cfg['api_key']}"}
+        timeout = 120
+    else:
         return None
     tables = list(tables_data.keys())
     if not tables:
@@ -96,7 +114,6 @@ def classify_schema(tables_data, fk_list):
 
     prompt = _build_prompt(tables_data, fk_list)
     url = f"{cfg['base_url']}/chat/completions"
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {cfg['api_key']}"}
     body = {
         "model": cfg["model"],
         "temperature": cfg["temperature"],
@@ -105,7 +122,7 @@ def classify_schema(tables_data, fk_list):
             {"role": "user", "content": prompt},
         ],
     }
-    resp = requests.post(url, headers=headers, json=body, timeout=120)
+    resp = requests.post(url, headers=headers, json=body, timeout=timeout)
     if resp.status_code != 200:
         return None
     try:

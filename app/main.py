@@ -22,6 +22,10 @@ from app.services import sql_import
 from app.services import sql_export
 from app.services import datadict_import
 from app.services import datadict_export
+from app.services import report_export
+from app.services import schema_linter
+from app.services import schema_diff
+from app.services import mock_data
 
 # Initialize SQLite Database
 db.init_db()
@@ -265,6 +269,109 @@ async def parse_sql_text(payload: Dict[str, Any] = Body(...)):
         },
     }
 
+class SchemaMutateRequest(BaseModel):
+    action: str
+    params: Dict[str, Any] = {}
+
+@app.post("/api/schema/mutate")
+def mutate_schema(req: SchemaMutateRequest):
+    cached = db.get_cached_schema()
+    if not cached:
+        raise HTTPException(status_code=400, detail="No schema cached")
+    tables_data = cached["tablesData"]
+    fk_list = cached["fkList"]
+    action = req.action
+    params = req.params
+
+    if action == "add_table":
+        tname = params.get("table_name", "").upper().strip()
+        if not tname:
+            raise HTTPException(status_code=400, detail="table_name is required")
+        cols = params.get("columns") or []
+        pks = params.get("pks") or []
+        tables_data[tname] = {
+            "columns": cols,
+            "pks": pks,
+            "comment": params.get("comment"),
+        }
+        for fk in params.get("foreign_keys") or []:
+            fk_list.append(fk)
+
+    elif action == "add_column":
+        tname = params.get("table", "").upper().strip()
+        if tname in tables_data:
+            col_obj = {
+                "name": params.get("column_name", "").lower().strip(),
+                "type": params.get("data_type", "VARCHAR2(100)"),
+                "nullable": params.get("nullable", True),
+                "unique": params.get("is_unique", False),
+                "comment": params.get("comment"),
+                "description": params.get("comment"),
+            }
+            tables_data[tname]["columns"].append(col_obj)
+            if params.get("is_pk"):
+                tables_data[tname].setdefault("pks", []).append(col_obj["name"])
+            if params.get("fk_parent_table"):
+                fk_list.append({
+                    "child": tname,
+                    "parent": params["fk_parent_table"].upper(),
+                    "cols": col_obj["name"],
+                    "fk": f"FK_{tname}_{params['fk_parent_table']}_{col_obj['name']}"
+                })
+
+    elif action == "drop_column":
+        tname = params.get("table", "").upper().strip()
+        cname = params.get("column_name", "").lower().strip()
+        if tname in tables_data:
+            tables_data[tname]["columns"] = [c for c in tables_data[tname]["columns"] if c["name"].lower() != cname]
+            if "pks" in tables_data[tname]:
+                tables_data[tname]["pks"] = [p for p in tables_data[tname]["pks"] if p.lower() != cname]
+            fk_list[:] = [f for f in fk_list if not (f["child"] == tname and f["cols"] == cname)]
+
+    elif action == "add_relationship":
+        fk_list.append({
+            "child": params["child_table"].upper(),
+            "parent": params["parent_table"].upper(),
+            "cols": params["child_column"].lower(),
+            "fk": params.get("fk_name") or f"FK_{params['child_table']}_{params['parent_table']}_{params['child_column']}"
+        })
+
+    elif action == "drop_table":
+        tname = params.get("table", "").upper().strip()
+        if tname in tables_data:
+            del tables_data[tname]
+        fk_list[:] = [f for f in fk_list if f["child"] != tname and f["parent"] != tname]
+
+    elif action in ("document_schema", "set_table_comment", "set_column_comment"):
+        if action == "set_table_comment":
+            t = params.get("table", "").upper()
+            if t in tables_data:
+                tables_data[t]["comment"] = params.get("comment")
+        elif action == "set_column_comment":
+            t = params.get("table", "").upper()
+            c = params.get("column", "").lower()
+            if t in tables_data:
+                for col in tables_data[t].get("columns", []):
+                    if col["name"].lower() == c:
+                        col["comment"] = params.get("comment")
+                        col["description"] = params.get("comment")
+        elif action == "document_schema":
+            for item in params.get("comments") or []:
+                t = item.get("table", "").upper()
+                if t in tables_data:
+                    if item.get("table_comment"):
+                        tables_data[t]["comment"] = item["table_comment"]
+                    for col_c in item.get("columns") or []:
+                        c_name = col_c.get("name", "").lower()
+                        for col in tables_data[t].get("columns", []):
+                            if col["name"].lower() == c_name:
+                                col["comment"] = col_c.get("comment")
+                                col["description"] = col_c.get("comment")
+
+    db.save_schema_cache(tables_data, fk_list, dialect=cached.get("dialect", "oracle"),
+                         source=cached.get("source", "oracle"), schema_name=cached.get("schemaName"))
+    return {"success": True, "tableCount": len(tables_data), "fkCount": len(fk_list)}
+
 @app.post("/api/dictionary/import")
 async def import_data_dictionary(
     files: list[UploadFile] = FileParam(...),
@@ -476,6 +583,166 @@ def dictionary_from_schema(req: SchemaExportRequest):
                     headers={"Content-Disposition": 'attachment; filename="data_dictionary.xlsx"',
                              "X-Tables": str(len(req.tablesData)), "X-Fks": str(len(fks))})
 
+class ReportExportRequest(BaseModel):
+    tablesData: Optional[Dict[str, Any]] = None
+    fkList: Optional[List[Dict[str, Any]]] = None
+    positions: Optional[Dict[str, Any]] = None
+    subsystems: Optional[Any] = None
+    theme: Optional[str] = "dark"
+    lang: Optional[str] = "ar"
+    dialect: Optional[str] = "oracle"
+    clientSvg: Optional[str] = None
+
+@app.get("/api/export/report/html")
+@app.post("/api/export/report/html")
+def export_html_report(req: Optional[ReportExportRequest] = Body(None)):
+    cached = db.get_cached_schema() or {}
+    tables_data = (req.tablesData if req and req.tablesData else cached.get("tablesData")) or {}
+    if not tables_data:
+        raise HTTPException(status_code=400, detail="No schema available for report generation")
+    
+    fk_list = (req.fkList if req and req.fkList is not None else cached.get("fkList")) or []
+    positions = (req.positions if req and req.positions else None)
+    if not positions:
+        states = db.get_all_table_states()
+        positions = states.get("positions") or {}
+    
+    subsystems = (req.subsystems if req and req.subsystems else None)
+    if not subsystems and cached:
+        try:
+            subsystems = compute_subsystems(cached)
+        except Exception:
+            subsystems = None
+            
+    theme = (req.theme if req and req.theme else "dark")
+    lang = (req.lang if req and req.lang else "ar")
+    client_svg = (req.clientSvg if req and req.clientSvg else None)
+
+    try:
+        html_content = report_export.generate_standalone_html_report(
+            tables_data=tables_data,
+            fk_list=fk_list,
+            positions=positions,
+            subsystems=subsystems,
+            theme=theme,
+            lang=lang,
+            client_svg=client_svg
+        )
+        return Response(
+            content=html_content,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="ERD_Studio_Interactive_Report.html"',
+                "X-Tables": str(len(tables_data)),
+                "X-Fks": str(len(fk_list))
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate HTML report: {e}")
+
+@app.get("/api/export/report/pdf")
+@app.post("/api/export/report/pdf")
+def export_pdf_report(req: Optional[ReportExportRequest] = Body(None)):
+    cached = db.get_cached_schema() or {}
+    tables_data = (req.tablesData if req and req.tablesData else cached.get("tablesData")) or {}
+    if not tables_data:
+        raise HTTPException(status_code=400, detail="No schema available for PDF report generation")
+    
+    fk_list = (req.fkList if req and req.fkList is not None else cached.get("fkList")) or []
+    subsystems = (req.subsystems if req and req.subsystems else None)
+    if not subsystems and cached:
+        try:
+            subsystems = compute_subsystems(cached)
+        except Exception:
+            subsystems = None
+            
+    dialect = (req.dialect if req and req.dialect else cached.get("dialect", "oracle"))
+    lang = (req.lang if req and req.lang else "ar")
+
+    try:
+        pdf_bytes = report_export.generate_pdf_report(
+            tables_data=tables_data,
+            fk_list=fk_list,
+            subsystems=subsystems,
+            dialect=dialect,
+            lang=lang
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'attachment; filename="ERD_Executive_Data_Dictionary.pdf"',
+                "X-Tables": str(len(tables_data)),
+                "X-Fks": str(len(fk_list))
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {e}")
+
+# --- Database Engineering & Audit Endpoints ---
+
+class AuditLintRequest(BaseModel):
+    tablesData: Optional[Dict[str, Any]] = None
+    fkList: Optional[List[Dict[str, Any]]] = None
+    dialect: Optional[str] = "oracle"
+
+@app.post("/api/audit/lint")
+def audit_schema_endpoint(req: Optional[AuditLintRequest] = Body(None)):
+    cached = db.get_cached_schema() or {}
+    tables_data = (req.tablesData if req and req.tablesData else cached.get("tablesData")) or {}
+    if not tables_data:
+        raise HTTPException(status_code=400, detail="No schema available for auditing")
+    fk_list = (req.fkList if req and req.fkList is not None else cached.get("fkList")) or []
+    dialect = (req.dialect if req and req.dialect else cached.get("dialect", "oracle"))
+    try:
+        return schema_linter.audit_schema(tables_data, fk_list, dialect=dialect)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audit failed: {e}")
+
+class AuditDiffRequest(BaseModel):
+    sourceSchema: Dict[str, Any]
+    targetSchema: Dict[str, Any]
+    dialect: Optional[str] = "oracle"
+
+@app.post("/api/audit/diff")
+def schema_diff_endpoint(req: AuditDiffRequest):
+    try:
+        return schema_diff.compare_schemas(
+            source_schema=req.sourceSchema,
+            target_schema=req.targetSchema,
+            dialect=req.dialect or "oracle"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Schema diff failed: {e}")
+
+class MockDataRequest(BaseModel):
+    tablesData: Optional[Dict[str, Any]] = None
+    fkList: Optional[List[Dict[str, Any]]] = None
+    rowCount: Optional[int] = 10
+    dialect: Optional[str] = "oracle"
+    lang: Optional[str] = "ar"
+
+@app.post("/api/audit/mock-data")
+def mock_data_endpoint(req: Optional[MockDataRequest] = Body(None)):
+    cached = db.get_cached_schema() or {}
+    tables_data = (req.tablesData if req and req.tablesData else cached.get("tablesData")) or {}
+    if not tables_data:
+        raise HTTPException(status_code=400, detail="No schema available for mock data generation")
+    fk_list = (req.fkList if req and req.fkList is not None else cached.get("fkList")) or []
+    row_count = req.rowCount if req and req.rowCount else 10
+    dialect = (req.dialect if req and req.dialect else cached.get("dialect", "oracle"))
+    lang = (req.lang if req and req.lang else "ar")
+    try:
+        return mock_data.generate_mock_data(
+            tables_data=tables_data,
+            fk_list=fk_list,
+            row_count=row_count,
+            dialect=dialect,
+            lang=lang
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Mock data generation failed: {e}")
+
 @app.post("/api/settings/test-db")
 def test_oracle_connection(req: DbTestRequest):
     dsn = f"{req.host}:{req.port}/{req.service_name}"
@@ -679,9 +946,16 @@ def post_ai_config(payload: Dict[str, Any] = Body(...)):
 
 @app.post("/api/ai/test")
 def test_ai(payload: Dict[str, Any] = Body(None)):
-    if payload and any(payload.get(k) is not None for k in ("ai_provider", "ai_api_key", "ai_base_url", "ai_model")):
+    if payload:
         cfg = ai_assistant.get_ai_config()
-        cfg.update({k: payload[k] for k in ("ai_provider", "ai_api_key", "ai_base_url", "ai_model") if payload.get(k) is not None})
+        if "ai_provider" in payload or "provider" in payload:
+            cfg["provider"] = payload.get("ai_provider") or payload.get("provider")
+        if "ai_base_url" in payload or "base_url" in payload:
+            cfg["base_url"] = payload.get("ai_base_url") or payload.get("base_url")
+        if "ai_api_key" in payload or "api_key" in payload:
+            cfg["api_key"] = payload.get("ai_api_key") if "ai_api_key" in payload else payload.get("api_key", "")
+        if "ai_model" in payload or "model" in payload:
+            cfg["model"] = payload.get("ai_model") or payload.get("model")
     else:
         cfg = None
     return ai_assistant.test_provider(cfg)
@@ -708,11 +982,11 @@ def ai_chat(payload: Dict[str, Any] = Body(...)):
     def generate():
         try:
             for ev in ai_assistant.chat_agent(messages, context):
-                yield json.dumps(ev, ensure_ascii=False) + "\n"
+                yield (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
         except Exception as e:
-            yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
+            yield (json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n").encode("utf-8")
 
-    return StreamingResponse(generate(), media_type="application/x-ndjson")
+    return StreamingResponse(generate(), media_type="application/x-ndjson; charset=utf-8")
 
 
 # Mount Static Frontend

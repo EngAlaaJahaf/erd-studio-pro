@@ -35,7 +35,7 @@ class CodeReader(HTMLParser):
 
 
 def check(markdown, expected):
-    html = (Path(__file__).resolve().parents[1] / 'static/index.html').read_text(encoding='utf-8')
+    html = (Path(__file__).resolve().parents[1] / 'static/js/app.js').read_text(encoding='utf-8')
     source = html[html.index('function _escapeHtml('):html.index('// Delegated handler')]
     js = 'var window={__codeBlocks:[]},i18n={en:{}},currentLang="en";\n' + source
     js += '\nprocess.stdout.write(mdToHtml(' + json.dumps(markdown) + '));'

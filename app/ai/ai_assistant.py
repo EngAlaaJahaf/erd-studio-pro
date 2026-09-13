@@ -8,6 +8,7 @@ Three layers:
 """
 
 import json
+import secrets
 import re
 import time
 import uuid
@@ -18,15 +19,36 @@ from app.core import database as db
 from app.core import subsystems as subsys
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration & OpenCode Zen Support
 # ---------------------------------------------------------------------------
+def _get_opencode_headers():
+    session_id = f"ses_{secrets.token_hex(32)}"
+    return {
+        "Content-Type": "application/json",
+        "x-opencode-session": session_id,
+        "x-opencode-client": "tui",
+        "x-opencode-request": f"usr_{session_id[4:12]}",
+        "User-Agent": "opencode/0.1.0",
+    }
+
 def get_ai_config():
     s = db.get_all_settings()
+    provider = s.get("ai_provider", "local")
+    raw_base = s.get("ai_base_url", "")
+    raw_model = s.get("ai_model", "")
+
+    if provider == "opencode":
+        base_url = raw_base if (raw_base and "opencode.ai" in raw_base) else "https://opencode.ai/zen/v1"
+        model = raw_model if (raw_model and raw_model != "gpt-4o-mini") else "big-pickle"
+    else:
+        base_url = raw_base or "https://api.openai.com/v1"
+        model = raw_model or "gpt-4o-mini"
+
     return {
-        "provider": s.get("ai_provider", "local"),
-        "base_url": s.get("ai_base_url", "https://api.openai.com/v1").rstrip("/"),
+        "provider": provider,
+        "base_url": base_url.rstrip("/"),
         "api_key": s.get("ai_api_key", ""),
-        "model": s.get("ai_model", "gpt-4o-mini"),
+        "model": model,
         "temperature": float(s.get("ai_temperature", "0.4") or 0.4),
     }
 
@@ -300,6 +322,198 @@ def _tool_defs():
                 "parameters": {"type": "object", "properties": {}, "required": []}
             }
         },
+        # ---- Conversational Modeling & Live Schema Mutation Tools ----
+        {
+            "type": "function",
+            "function": {
+                "name": "add_table",
+                "description": "Add a new table to the current diagram with columns, primary keys, and optional foreign key relationships.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table_name": {"type": "string", "description": "Table name in UPPERCASE e.g. GL_PAYMENTS"},
+                        "columns": {
+                            "type": "array",
+                            "description": "List of column definitions",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string", "description": "Column name e.g. PAYMENT_ID"},
+                                    "type": {"type": "string", "description": "Data type e.g. NUMBER(19), VARCHAR2(100), DATE"},
+                                    "nullable": {"type": "boolean", "description": "Allow NULL values (default true)"},
+                                    "is_pk": {"type": "boolean", "description": "Is this part of primary key"},
+                                    "is_unique": {"type": "boolean", "description": "Is unique constraint"},
+                                    "comment": {"type": "string", "description": "Arabic or English description of the column"}
+                                },
+                                "required": ["name", "type"]
+                            }
+                        },
+                        "pks": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Primary key column names e.g. ['PAYMENT_ID']"
+                        },
+                        "foreign_keys": {
+                            "type": "array",
+                            "description": "Foreign keys linking this new table to existing tables",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "child_col": {"type": "string"},
+                                    "parent_table": {"type": "string"},
+                                    "parent_col": {"type": "string"},
+                                    "fk_name": {"type": "string"}
+                                },
+                                "required": ["child_col", "parent_table"]
+                            }
+                        },
+                        "subsystem": {"type": "string", "description": "Subsystem classification e.g. finance, academic, auth"},
+                        "comment": {"type": "string", "description": "Arabic/English description of table purpose"}
+                    },
+                    "required": ["table_name", "columns"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_column",
+                "description": "Add a new column to an existing table in the current diagram.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string", "description": "Target table name e.g. RAF_STUDENTS"},
+                        "column_name": {"type": "string", "description": "Name of the new column e.g. PHONE_NUMBER"},
+                        "data_type": {"type": "string", "description": "Data type e.g. VARCHAR2(20)"},
+                        "nullable": {"type": "boolean", "description": "Allow NULL values (default true)"},
+                        "is_pk": {"type": "boolean", "description": "Make this column part of PK"},
+                        "is_unique": {"type": "boolean", "description": "Make this column unique"},
+                        "comment": {"type": "string", "description": "Arabic or English description of the column"},
+                        "fk_parent_table": {"type": "string", "description": "Optional: parent table if this column is a foreign key"},
+                        "fk_parent_col": {"type": "string", "description": "Optional: parent column"}
+                    },
+                    "required": ["table", "column_name", "data_type"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "drop_column",
+                "description": "Drop / remove a column from an existing table.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string", "description": "Table name"},
+                        "column_name": {"type": "string", "description": "Column to drop"}
+                    },
+                    "required": ["table", "column_name"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_relationship",
+                "description": "Create a foreign key relationship between two tables in the diagram.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "child_table": {"type": "string", "description": "Table containing the FK column"},
+                        "child_column": {"type": "string", "description": "FK column in child table"},
+                        "parent_table": {"type": "string", "description": "Referenced parent table"},
+                        "parent_column": {"type": "string", "description": "Referenced PK column in parent table"},
+                        "fk_name": {"type": "string", "description": "Optional constraint name"}
+                    },
+                    "required": ["child_table", "child_column", "parent_table", "parent_column"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "drop_table",
+                "description": "Remove a table and its foreign keys from the diagram.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string", "description": "Table to delete"}
+                    },
+                    "required": ["table"]
+                }
+            }
+        },
+        # ---- AI Schema Documenter Tools ----
+        {
+            "type": "function",
+            "function": {
+                "name": "document_schema",
+                "description": "Automatically document tables and columns with detailed Arabic or English comments and descriptions for data dictionary, SQL DDL export, and canvas tooltips.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string", "description": "Optional table name to document specifically"},
+                        "language": {"type": "string", "enum": ["ar", "en"], "description": "Language for generated documentation (ar or en)"},
+                        "comments": {
+                            "type": "array",
+                            "description": "List of tables with descriptions and column comments",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "table": {"type": "string"},
+                                    "table_comment": {"type": "string", "description": "Table description / purpose"},
+                                    "columns": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "name": {"type": "string"},
+                                                "comment": {"type": "string", "description": "Column description / business meaning"}
+                                            },
+                                            "required": ["name", "comment"]
+                                        }
+                                    }
+                                },
+                                "required": ["table"]
+                            }
+                        }
+                    },
+                    "required": ["comments"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_table_comment",
+                "description": "Set the comment/description of a table.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string"},
+                        "comment": {"type": "string"}
+                    },
+                    "required": ["table", "comment"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_column_comment",
+                "description": "Set the comment/description of a specific column.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "table": {"type": "string"},
+                        "column": {"type": "string"},
+                        "comment": {"type": "string"}
+                    },
+                    "required": ["table", "column", "comment"]
+                }
+            }
+        },
+
     ]
 
 
@@ -308,7 +522,109 @@ CANVAS_TOOLS = {
     "highlight_tables", "clear_highlights", "hide_tables", "show_tables",
     "show_only_subsystem", "show_all_tables", "color_by_subsystem",
     "hide_audit_columns", "show_all_columns", "fit_view",
+    # Live schema mutation & documentation tools:
+    "add_table", "add_column", "drop_column", "add_relationship", "drop_table",
+    "document_schema", "set_table_comment", "set_column_comment",
 }
+
+def _apply_backend_mutation(name, args):
+    """Reflect live schema mutations immediately into SQLite cached schema."""
+    try:
+        cached = db.get_cached_schema()
+        if not cached:
+            return
+        td = cached["tablesData"]
+        fk = cached["fkList"]
+        if name == "add_table":
+            tname = args.get("table_name", "").upper().strip()
+            if tname:
+                cols = args.get("columns") or []
+                pks = args.get("pks") or []
+                td[tname] = {
+                    "columns": cols,
+                    "pks": pks,
+                    "comment": args.get("comment"),
+                }
+                for f in args.get("foreign_keys") or []:
+                    fk.append({
+                        "child": tname,
+                        "parent": f["parent_table"].upper(),
+                        "cols": f["child_col"].lower(),
+                        "fk": f.get("fk_name") or f"FK_{tname}_{f['parent_table']}_{f['child_col']}"
+                    })
+        elif name == "add_column":
+            t = args.get("table", "").upper().strip()
+            if t in td:
+                cname = args.get("column_name", "").lower().strip()
+                col_obj = {
+                    "name": cname,
+                    "type": args.get("data_type", "VARCHAR2(100)"),
+                    "nullable": args.get("nullable", True),
+                    "unique": args.get("is_unique", False),
+                    "comment": args.get("comment"),
+                    "description": args.get("comment"),
+                }
+                td[t]["columns"].append(col_obj)
+                if args.get("is_pk"):
+                    td[t].setdefault("pks", []).append(cname)
+                if args.get("fk_parent_table"):
+                    fk.append({
+                        "child": t,
+                        "parent": args["fk_parent_table"].upper(),
+                        "cols": cname,
+                        "fk": f"FK_{t}_{args['fk_parent_table']}_{cname}"
+                    })
+        elif name == "drop_column":
+            t = args.get("table", "").upper().strip()
+            cname = args.get("column_name", "").lower().strip()
+            if t in td:
+                td[t]["columns"] = [c for c in td[t]["columns"] if c["name"].lower() != cname]
+                if "pks" in td[t]:
+                    td[t]["pks"] = [p for p in td[t]["pks"] if p.lower() != cname]
+                fk[:] = [f for f in fk if not (f["child"] == t and f["cols"] == cname)]
+        elif name == "add_relationship":
+            fk.append({
+                "child": args["child_table"].upper(),
+                "parent": args["parent_table"].upper(),
+                "cols": args["child_column"].lower(),
+                "fk": args.get("fk_name") or f"FK_{args['child_table']}_{args['parent_table']}_{args['child_column']}"
+            })
+        elif name == "drop_table":
+            t = args.get("table", "").upper().strip()
+            if t in td:
+                del td[t]
+            fk[:] = [f for f in fk if f["child"] != t and f["parent"] != t]
+        elif name in ("document_schema", "set_table_comment", "set_column_comment"):
+            if name == "set_table_comment":
+                t = args.get("table", "").upper()
+                if t in td:
+                    td[t]["comment"] = args.get("comment")
+            elif name == "set_column_comment":
+                t = args.get("table", "").upper()
+                c = args.get("column", "").lower()
+                if t in td:
+                    for col in td[t].get("columns", []):
+                        if col["name"].lower() == c:
+                            col["comment"] = args.get("comment")
+                            col["description"] = args.get("comment")
+            elif name == "document_schema":
+                for item in args.get("comments") or []:
+                    t = item.get("table", "").upper()
+                    if t in td:
+                        if item.get("table_comment"):
+                            td[t]["comment"] = item["table_comment"]
+                        for col_c in item.get("columns") or []:
+                            c_name = col_c.get("name", "").lower()
+                            for col in td[t].get("columns", []):
+                                if col["name"].lower() == c_name:
+                                    col["comment"] = col_c.get("comment")
+                                    col["description"] = col_c.get("comment")
+
+        db.save_schema_cache(td, fk, dialect=cached.get("dialect", "oracle"),
+                             source=cached.get("source", "oracle"), schema_name=cached.get("schemaName"))
+    except Exception:
+        pass
+
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +722,17 @@ SYSTEM_PROMPT = (
     "get_schema_overview / get_table_info / find_related_tables to explain it. If asked for a UML or non-ERD "
     "diagram, politely redirect: the assistant is specialized in databases and this app's database schema only.\n\n"
     "Rules:\n"
+"Live Schema Mutation (Conversational Modeling):\n"
+    "- When the user asks to add a table (e.g. 'أضف جدولاً للمدفوعات واربطه بجدول الحسابات'), call `add_table` "
+    "with full columns, PKs, data types, comments, and foreign keys. The table is placed seamlessly on the canvas in the current active tab without clearing existing tables.\n"
+    "- When the user asks to add a column (e.g. 'أضف حقل رقم الهاتف لجدول الطلاب واجعله فريداً'), call `add_column` "
+    "with table, column_name, data_type, nullable, is_unique, and comment.\n"
+    "- When the user asks to delete a column or table, call `drop_column` or `drop_table`.\n"
+    "- When the user asks to link or create a relation between tables, call `add_relationship`.\n\n"
+    "AI Schema Documenter:\n"
+    "- When the user asks to document, explain, or generate comments for tables and columns (e.g. 'وثق لي جدول الطلاب وحقوله بالعربية', 'ولد شروحات وتعليقات COMMENT ON COLUMN'), "
+    "call `document_schema` or `set_table_comment` / `set_column_comment` with accurate, professional descriptions in the requested language (Arabic by default). "
+    "These comments are automatically integrated into diagram hover tooltips, SQL DDL export, and the Data Dictionary.\n\n"
     "- Reply in the SAME language as the user (Arabic if the user writes Arabic, English otherwise).\n"
     "- Use full table names (e.g. RAF_STUDENTS, COM_ROLES_AUTHORIZATION) when referencing tables.\n"
     "- Be concise but helpful. Before answering factual schema questions you MUST call the appropriate "
@@ -419,11 +746,19 @@ SYSTEM_PROMPT = (
 
 def _stream_chat_completion(messages, tools, config):
     """Yield parsed deltas from an OpenAI-compatible streamed response."""
+    provider = config.get("provider", "openai")
     url = f"{config['base_url']}/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {config['api_key']}",
-    }
+
+    if provider == "opencode":
+        headers = _get_opencode_headers()
+        timeout = 25
+    else:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config['api_key']}",
+        }
+        timeout = 120
+
     body = {
         "model": config["model"],
         "messages": messages,
@@ -431,30 +766,36 @@ def _stream_chat_completion(messages, tools, config):
         "stream": True,
         "tools": tools or None,
     }
-    with requests.post(url, headers=headers, json=body, stream=True, timeout=120) as resp:
+    with requests.post(url, headers=headers, json=body, stream=True, timeout=timeout) as resp:
+        resp.encoding = "utf-8"
         if resp.status_code != 200:
             try:
                 detail = resp.json().get("error", {}).get("message", resp.text[:300])
             except Exception:
                 detail = resp.text[:300]
+            if resp.status_code == 429 or "Rate limit" in detail:
+                detail = "استنفدت الحصة المجانية المؤقتة لعنوان IP من بوابة OpenCode Zen (Rate Limit). يمكنك التبديل للمساعد المحلي أو استخدام مزود بمفتاح."
             raise RuntimeError(f"Provider error {resp.status_code}: {detail}")
-        for raw in resp.iter_lines(decode_unicode=True):
+        for raw in resp.iter_lines():
             if not raw:
                 continue
-            if raw.startswith("data:"):
-                raw = raw[5:].strip()
-            if raw == "[DONE]":
+            line = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+            line = line.strip()
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if line == "[DONE]":
                 break
             try:
-                chunk = json.loads(raw)
+                chunk = json.loads(line)
             except Exception:
                 continue
             choices = chunk.get("choices") or []
             if not choices:
                 continue
             delta = choices[0].get("delta") or {}
-            if "content" in delta and delta["content"]:
-                yield {"type": "token", "content": delta["content"]}
+            c_token = delta.get("content")
+            if c_token:
+                yield {"type": "token", "content": c_token}
             if delta.get("tool_calls"):
                 for tc in delta["tool_calls"]:
                     yield {"type": "toolcall", "call": tc}
@@ -507,8 +848,7 @@ def _agent_loop(messages, config, history_excerpt=None):
                 elif ev["type"] == "finish":
                     stream_done["reason"] = ev["reason"]
         except Exception as e:
-            yield {"type": "error", "message": str(e)}
-            return
+            raise
 
         if not toolcall_events:
             yield {"type": "done"}
@@ -534,8 +874,9 @@ def _agent_loop(messages, config, history_excerpt=None):
 
             if name in CANVAS_TOOLS:
                 # Forward to the user's canvas; the frontend applies it live.
+                _apply_backend_mutation(name, args)
                 yield {"type": "action", "name": name, "arguments": args}
-                result = {"ok": True, "note": f"Canvas action '{name}' was applied to the diagram."}
+                result = {"ok": True, "note": f"Action '{name}' was applied to the diagram and schema successfully."}
             else:
                 result = execute_logical_tool(name, args)
 
@@ -727,6 +1068,93 @@ def local_respond(messages, context):
         enabled = not ("دون" in low or "بدون" in low or "false" in low or "لا" in low)
         actions.append({"name": "color_by_subsystem", "arguments": {"enabled": enabled}})
 
+    # 5b) Conversational modeling (add table / add column / document) -----
+    if any(k in low for k in ["أضف جدول", "اضف جدول", "انشئ جدول", "أنشئ جدول", "جدول جديد", "add table", "create table"]):
+        # Heuristic add table
+        m_t = re.search(r"(?:جدول|table)\s+([A-Za-z0-9_]+)", text, re.I)
+        tname = m_t.group(1).upper() if m_t else ("PAYMENTS" if "مدفوع" in low or "pay" in low else "NEW_TABLE")
+        cols = [
+            {"name": f"{tname.lower()}_id", "type": "NUMBER(19)", "is_pk": True, "nullable": False, "comment": "المعرف الأساسي"},
+            {"name": "name", "type": "VARCHAR2(150)", "nullable": False, "comment": "الاسم / الوصف"},
+            {"name": "created_at", "type": "DATE", "nullable": False, "comment": "تاريخ الإنشاء"}
+        ]
+        fks = []
+        if any(k in low for k in ["حساب", "الحسابات", "account"]) and "GL_CHART_OF_ACCOUNTS" in schema["tables"]:
+            cols.append({"name": "account_id", "type": "NUMBER(19)", "nullable": False, "comment": "مرجع الحساب"})
+            fks.append({"child_col": "account_id", "parent_table": "GL_CHART_OF_ACCOUNTS", "parent_col": "account_id"})
+        elif any(k in low for k in ["طالب", "الطلاب", "student"]) and "RAF_STUDENTS" in schema["tables"]:
+            cols.append({"name": "student_id", "type": "NUMBER(19)", "nullable": False, "comment": "مرجع الطالب"})
+            fks.append({"child_col": "student_id", "parent_table": "RAF_STUDENTS", "parent_col": "student_id"})
+
+        args = {
+            "table_name": tname,
+            "columns": cols,
+            "pks": [f"{tname.lower()}_id"],
+            "foreign_keys": fks,
+            "comment": f"جدول {tname}"
+        }
+        _apply_backend_mutation("add_table", args)
+        yield {"type": "action", "name": "add_table", "arguments": args}
+        reply = (f"✨ تم إنشاء وإضافة جدول **{tname}** بنجاح إلى المخطط الحي في التبويب الحالي مع الحقول والمفاتيح." if ar
+                 else f"✨ Created and added table **{tname}** to the active diagram successfully.")
+        yield from say(reply)
+        return
+
+    if any(k in low for k in ["أضف حقل", "اضف حقل", "أضف عمود", "اضف عمود", "add column", "add field"]):
+        target_t = t_tables[0] if t_tables else ("RAF_STUDENTS" if "طالب" in low or "طلاب" in low else None)
+        if target_t:
+            col_name = "phone_number" if "هاتف" in low or "جوال" in low or "phone" in low else ("email" if "بريد" in low or "email" in low else "new_col")
+            col_type = "VARCHAR2(25)" if "phone" in col_name else "VARCHAR2(100)"
+            is_unq = "فريد" in low or "unique" in low
+            args = {
+                "table": target_t,
+                "column_name": col_name,
+                "data_type": col_type,
+                "nullable": True,
+                "is_unique": is_unq,
+                "comment": "رقم هاتف الطالب للتواصل" if "phone" in col_name else "حقل جديد"
+            }
+            _apply_backend_mutation("add_column", args)
+            yield {"type": "action", "name": "add_column", "arguments": args}
+            reply = (f"✨ تم إضافة الحقل **{col_name}** ({col_type}) إلى جدول **{target_t}** وحفظه في المخطط." if ar
+                     else f"✨ Added column **{col_name}** ({col_type}) to table **{target_t}**.")
+            yield from say(reply)
+            return
+
+    if any(k in low for k in ["وثق", "توثيق", "شروحات", "تعليقات", "document", "comment on"]):
+        target_t = t_tables[0] if t_tables else (schema["tables"][0] if schema["tables"] else None)
+        if target_t:
+            info = execute_logical_tool("get_table_info", {"table": target_t})
+            cols = info.get("columns", [])
+            doc_cols = []
+            for c in cols:
+                cname = c["name"]
+                c_desc = f"حقل {cname} في جدول {target_t}"
+                if "id" in cname.lower():
+                    c_desc = f"المعرف الرقمي ({cname})"
+                elif "name" in cname.lower():
+                    c_desc = f"الاسم الكامل ({cname})"
+                elif "date" in cname.lower() or "time" in cname.lower():
+                    c_desc = f"تاريخ ووقت السجل ({cname})"
+                elif "phone" in cname.lower():
+                    c_desc = f"رقم الهاتف للتواصل والمطابقة"
+                doc_cols.append({"name": cname, "comment": c_desc})
+
+            doc_args = {
+                "language": "ar" if ar else "en",
+                "comments": [{
+                    "table": target_t,
+                    "table_comment": f"جدول بيانات {target_t} المعتمد في النظام",
+                    "columns": doc_cols
+                }]
+            }
+            _apply_backend_mutation("document_schema", doc_args)
+            yield {"type": "action", "name": "document_schema", "arguments": doc_args}
+            reply = (f"📖 تم توليد التوثيق الشامل والشروحات لجدول **{target_t}** ({len(doc_cols)} حقل) وتضمينها كـ (COMMENT ON COLUMN) في المخطط وتصدير DDL وقاموس البيانات." if ar
+                     else f"📖 Generated full documentation and column comments for **{target_t}** ({len(doc_cols)} columns).")
+            yield from say(reply)
+            return
+
     # If we did visual work, summarize and stop ---------------------------
     if actions:
         for a in actions:
@@ -892,7 +1320,7 @@ def chat_agent(messages, context):
             except Exception:
                 pass
 
-    if provider == "local" or not config.get("api_key"):
+    if provider == "local" or (provider != "opencode" and not config.get("api_key")):
         yield from wrap(local_respond(messages, context))
         return
 
@@ -912,13 +1340,63 @@ def chat_agent(messages, context):
     for m in messages[-24:]:
         if isinstance(m.get("content"), str):
             msgs.append(m)
-    yield from wrap(_agent_loop(msgs, config, history_excerpt=excerpt))
+
+    if provider == "opencode":
+        try:
+            yield from wrap(_agent_loop(msgs, config, history_excerpt=excerpt))
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "Rate limit" in err_str or "timeout" in err_str.lower() or "استنفدت" in err_str:
+                yield {"type": "token", "content": "⚠️ *تنبيه: بوابة OpenCode Zen المجانية بلغت حد الحصة المؤقت لعنوان IP (Rate Limit). تم التبديل تلقائياً للمساعد المحلي الذكي:*\n\n"}
+                yield from wrap(local_respond(messages, context))
+            else:
+                raise
+    else:
+        yield from wrap(_agent_loop(msgs, config, history_excerpt=excerpt))
 
 
 def test_provider(config=None):
     config = config or get_ai_config()
-    if config.get("provider") == "local" or not config.get("api_key"):
-        return {"success": True, "mode": "local", "message": "Local assistant (works offline, no API key needed)"}
+    provider = config.get("provider") or config.get("ai_provider") or "local"
+    if provider == "local":
+        return {"success": True, "mode": "local", "message": "المساعد المحلي الذكي (يعمل بدون إنترنت وبدون مفتاح API)"}
+
+    if provider == "opencode":
+        base_url = (config.get("base_url") or config.get("ai_base_url") or "https://opencode.ai/zen/v1").rstrip("/")
+        model = config.get("model") or config.get("ai_model") or "big-pickle"
+        url = f"{base_url}/chat/completions"
+        headers = _get_opencode_headers()
+        try:
+            resp = requests.post(url, headers=headers, json={
+                "model": model,
+                "messages": [{"role": "user", "content": "ping"}],
+                "max_tokens": 5,
+            }, timeout=20)
+            resp.encoding = "utf-8"
+            if resp.status_code == 200:
+                return {
+                    "success": True,
+                    "mode": "remote",
+                    "model": model,
+                    "message": f"بوابة OpenCode Zen متصلة وجاهزة ({model})"
+                }
+            if resp.status_code == 429:
+                return {
+                    "success": False,
+                    "mode": "remote",
+                    "error": "OpenCode Zen (HTTP 429): الحصة المجانية لعنوان IP مستنفدة مؤقتاً (Rate limit). يُرجى المحاولة لاحقاً أو استخدام المساعد المحلي."
+                }
+            try:
+                detail = resp.json().get("error", {}).get("message", resp.text[:200])
+            except Exception:
+                detail = resp.text[:200]
+            return {"success": False, "mode": "remote", "error": f"HTTP {resp.status_code}: {detail}"}
+        except Exception as e:
+            return {"success": False, "mode": "remote", "error": f"خطأ اتصال بـ OpenCode Zen: {str(e)}"}
+
+    if not config.get("api_key"):
+        return {"success": False, "mode": "remote", "error": "مفتاح API مطلوب للمزود السحابي"}
+
     try:
         url = f"{config['base_url']}/chat/completions"
         resp = requests.post(url, headers={
@@ -929,6 +1407,7 @@ def test_provider(config=None):
             "messages": [{"role": "user", "content": "ping"}],
             "max_tokens": 5,
         }, timeout=30)
+        resp.encoding = "utf-8"
         if resp.status_code == 200:
             return {"success": True, "mode": "remote", "model": config["model"],
                     "message": f"Provider OK ({config['base_url']})"}

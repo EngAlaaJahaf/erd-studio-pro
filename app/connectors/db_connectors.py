@@ -38,6 +38,12 @@ SUPPORTED = {
         "fields": ["path"],
         "defaults": {"path": ""},
     },
+    "mssql": {
+        "label_ar": "SQL Server",
+        "label_en": "SQL Server",
+        "fields": ["host", "port", "database", "user", "password"],
+        "defaults": {"host": "localhost", "port": 1433, "database": ""},
+    },
 }
 
 # Driver availability ---------------------------------------------------------
@@ -57,6 +63,7 @@ def _check_driver(name):
 SUPPORTED["mysql"]["available"] = _check_driver("pymysql")
 SUPPORTED["postgres"]["available"] = _check_driver("psycopg2")
 SUPPORTED["oracle"]["available"] = _check_driver("oracledb")
+SUPPORTED["mssql"]["available"] = _check_driver("pymssql") or _check_driver("pyodbc")
 SUPPORTED["sqlite_file"]["available"] = True
 
 
@@ -331,6 +338,109 @@ def test_connection(dialect, params):
         return {"success": False, "latencyMs": elapsed, "error": str(e)}
 
 
+def _load_mssql(params):
+    """Load schema from Microsoft SQL Server via pyodbc or pymssql."""
+    host = params.get("host") or "localhost"
+    port = int(params.get("port", 1433) or 1433)
+    db = params.get("database") or ""
+    user = params.get("user") or ""
+    password = params.get("password") or ""
+
+    conn = None
+    try:
+        import pymssql
+        conn = pymssql.connect(server=host, port=port, user=user, password=password, database=db, as_dict=True)
+        cur = conn.cursor()
+    except ImportError:
+        try:
+            import pyodbc
+            conn_str = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={host},{port};DATABASE={db};UID={user};PWD={password}"
+            conn = pyodbc.connect(conn_str, timeout=5)
+            cur = conn.cursor()
+        except ImportError:
+            raise RuntimeError("SQL Server driver not found. Please install pymssql or pyodbc (pip install pymssql)")
+
+    try:
+        cur.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME")
+        rows = cur.fetchall()
+        tables = [r["TABLE_NAME"] if isinstance(r, dict) else r[0] for r in rows]
+        if not tables:
+            conn.close()
+            return _schema_result({}, [], "mssql", "mssql")
+
+        cur.execute(
+            "SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE "
+            "FROM INFORMATION_SCHEMA.COLUMNS ORDER BY TABLE_NAME, ORDINAL_POSITION"
+        )
+        cols_partition = {}
+        for r in cur.fetchall():
+            tbl = r["TABLE_NAME"] if isinstance(r, dict) else r[0]
+            col = r["COLUMN_NAME"] if isinstance(r, dict) else r[1]
+            dtype = r["DATA_TYPE"] if isinstance(r, dict) else r[2]
+            maxlen = r["CHARACTER_MAXIMUM_LENGTH"] if isinstance(r, dict) else r[3]
+            nullable = r["IS_NULLABLE"] if isinstance(r, dict) else r[4]
+            if tbl not in tables:
+                continue
+            display = str(dtype).lower()
+            if maxlen and int(maxlen) > 0:
+                display += f"({maxlen})"
+            cols_partition.setdefault(tbl, []).append({
+                "name": col, "type": display,
+                "nullable": bool(nullable and str(nullable).upper() == "YES")
+            })
+
+        cur.execute(
+            "SELECT tc.TABLE_NAME, ccu.COLUMN_NAME "
+            "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
+            "JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE ccu "
+            "ON tc.CONSTRAINT_NAME = ccu.CONSTRAINT_NAME "
+            "WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'"
+        )
+        pk_partition = {}
+        for r in cur.fetchall():
+            tbl = r["TABLE_NAME"] if isinstance(r, dict) else r[0]
+            col = r["COLUMN_NAME"] if isinstance(r, dict) else r[1]
+            pk_partition.setdefault(tbl, []).append(col)
+
+        cur.execute(
+            "SELECT fk.name AS FK_NAME, tp.name AS PARENT_TABLE, cp.name AS PARENT_COL, "
+            "tr.name AS CHILD_TABLE, cr.name AS CHILD_COL "
+            "FROM sys.foreign_keys fk "
+            "INNER JOIN sys.tables tp ON fk.referenced_object_id = tp.object_id "
+            "INNER JOIN sys.tables tr ON fk.parent_object_id = tr.object_id "
+            "INNER JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id "
+            "INNER JOIN sys.columns cp ON fkc.referenced_column_id = cp.column_id AND fkc.referenced_object_id = cp.object_id "
+            "INNER JOIN sys.columns cr ON fkc.parent_column_id = cr.column_id AND fkc.parent_object_id = cr.object_id"
+        )
+        fk_map = {}
+        for r in cur.fetchall():
+            fk_name = r["FK_NAME"] if isinstance(r, dict) else r[0]
+            parent = r["PARENT_TABLE"] if isinstance(r, dict) else r[1]
+            pcol = r["PARENT_COL"] if isinstance(r, dict) else r[2]
+            child = r["CHILD_TABLE"] if isinstance(r, dict) else r[3]
+            ccol = r["CHILD_COL"] if isinstance(r, dict) else r[4]
+            if fk_name not in fk_map:
+                fk_map[fk_name] = {"child": child, "parent": parent, "fk": fk_name, "cols": []}
+            fk_map[fk_name]["cols"].append(ccol)
+
+        tables_data = {}
+        for tbl in tables:
+            tables_data[tbl] = {
+                "columns": cols_partition.get(tbl, []),
+                "pks": pk_partition.get(tbl, [])
+            }
+        fk_list = [{"child": e["child"], "parent": e["parent"], "fk": e["fk"], "cols": ", ".join(e["cols"])} for e in fk_map.values()]
+        conn.close()
+        return _schema_result(tables_data, fk_list, "mssql", "mssql")
+    except Exception:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        raise
+
+
 def connect(dialect, params):
     """Connect to a live database and return the unified schema dict."""
     params = dict(params or {})
@@ -340,6 +450,8 @@ def connect(dialect, params):
         return _load_postgres(params)
     if dialect == "oracle":
         return _load_oracle(params)
+    if dialect in ("mssql", "sqlserver"):
+        return _load_mssql(params)
     if dialect == "sqlite_file":
         return _load_sqlite_file(params)
     raise ValueError(f"Unsupported dialect: {dialect}")

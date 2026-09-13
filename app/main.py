@@ -12,19 +12,19 @@ from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
 import oracledb
 
-import database as db
-import oracle_sync
-import subsystems as subsys
-import ai_assistant
-import ai_classify
-import db_connectors
-import sql_import
-import sql_export
-import datadict_import
-import datadict_export
-import document_sections
-import diagram_specs
-import diagram_llm
+from app.core import database as db
+from app.core import oracle_sync
+from app.core import subsystems as subsys
+from app.ai import ai_assistant
+from app.ai import ai_classify
+from app.connectors import db_connectors
+from app.services import sql_import
+from app.services import sql_export
+from app.services import datadict_import
+from app.services import datadict_export
+from app.services import document_sections
+from app.services import diagram_specs
+from app.ai import diagram_llm
 
 # Initialize SQLite Database
 db.init_db()
@@ -834,7 +834,7 @@ def diagram_generate_all(req: DiagramGenerateAllRequest):
 
 
 # Mount Static Frontend
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 if os.path.exists(STATIC_DIR):
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
@@ -845,4 +845,4 @@ if __name__ == "__main__":
     print(f"  Running at: http://localhost:{port}")
     print(f"  SQLite Database: {db.DB_PATH}")
     print(f"============================================================")
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=False)

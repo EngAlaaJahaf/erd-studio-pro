@@ -9,7 +9,7 @@ shapes consumed by diagram_specs.normalize_spec.
 import re
 from collections import OrderedDict
 
-from document_sections import _looks_like_title
+from app.services.document_sections import _looks_like_title
 
 ROLE_AR = [
     "المستخدم", "الطالب", "الطالبة", "الدكتور", "الأستاذ", "الأستاذة",

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "testr-erd-studio"
+version = "1.1.0"
+description = "TESTR ERD Studio Pro — Standalone ERD Modeling & Oracle Schema Tool"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "TESTR Team", email = "testr@testr.local" }]
+keywords = ["erd", "oracle", "diagram", "fastapi", "orm", "data-modeling"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Framework :: FastAPI",
+    "Operating System :: Microsoft :: Windows",
+]
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "requests>=2.31.0",
+    "openpyxl>=3.1.0",
+    "sqlglot>=25.0.0",
+    "oracledb>=2.0.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+ai = [
+    "openai>=1.0.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.0",
+    "black>=24.0.0",
+]
+
+[project.scripts]
+testr-erd-studio = "app.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["static/*.html", "static/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 120
+target-version = ["py310"]

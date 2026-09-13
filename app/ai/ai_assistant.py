@@ -14,8 +14,8 @@ import uuid
 
 import requests
 
-import database as db
-import subsystems as subsys
+from app.core import database as db
+from app.core import subsystems as subsys
 
 # ---------------------------------------------------------------------------
 # Configuration

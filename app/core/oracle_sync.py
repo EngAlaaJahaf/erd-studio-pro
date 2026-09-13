@@ -1,6 +1,6 @@
 import oracledb
 import logging
-from database import get_all_settings, save_schema_cache, get_cached_schema
+from app.core.database import get_all_settings, save_schema_cache, get_cached_schema
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("oracle_sync")
@@ -124,7 +124,7 @@ def sync_schema_from_oracle(user=None, password=None, dsn=None, table_filter=Non
 
 
 if __name__ == "__main__":
-    from database import init_db
+    from app.core.database import init_db
     init_db()
     res = sync_schema_from_oracle()
     print("Sync Result:", res["success"], f"Tables: {res.get('tableCount')}, FKs: {res.get('fkCount')}")

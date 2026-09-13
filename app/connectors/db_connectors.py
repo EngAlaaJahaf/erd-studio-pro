@@ -10,8 +10,8 @@ import time
 import sqlite3
 import sqlglot
 
-import oracle_sync
-from sql_import import parse_sql_schema
+from app.core import oracle_sync
+from app.services.sql_import import parse_sql_schema
 
 SUPPORTED = {
     "oracle": {

@@ -13,7 +13,7 @@ import re
 
 import requests
 
-import database as db
+from app.core import database as db
 
 
 def _config():

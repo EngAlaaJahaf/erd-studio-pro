@@ -7,8 +7,8 @@ import re
 
 import requests
 
-import ai_classify
-from diagram_extract import extract as extract_local
+from app.ai import ai_classify
+from app.services.diagram_extract import extract as extract_local
 
 _TYPE_SPEC = {
     "sequence": (
@@ -96,7 +96,7 @@ def generate(text, diagram_type, prefer_llm=True):
         try:
             spec = generate_with_llm(text, diagram_type)
             try:
-                from diagram_specs import normalize_spec
+                from app.services.diagram_specs import normalize_spec
                 normalize_spec(spec)
                 return spec, "ai", warnings
             except (ValueError, TypeError, KeyError) as e:

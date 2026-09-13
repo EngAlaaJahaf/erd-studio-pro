@@ -14,8 +14,8 @@ Package layout:
 - ``app.exceptions``  : domain exceptions + FastAPI exception handlers
 - ``app.core``        : database access layer (SQLite, schema cache, presets)
 - ``app.connectors``  : DBMS connectors (Oracle sync, SQLite file, etc.)
-- ``app.services``    : business logic (SQL/Data-Dictionary import/export, diagrams)
-- ``app.ai``          : AI assistant / classification / LLM diagram generation
+- ``app.services``    : business logic (SQL/Data-Dictionary import/export)
+- ``app.ai``          : AI assistant / classification for database schemas
 - ``app.api``         : REST routes, grouped by feature
 """
 

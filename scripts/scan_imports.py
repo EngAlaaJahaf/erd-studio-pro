@@ -19,8 +19,6 @@ LOCAL_MODULE_NAMES = {
     "db_connectors",
     "sql_import", "sql_export",
     "datadict_import", "datadict_export",
-    "document_sections", "diagram_specs",
-    "diagram_extract", "diagram_llm",
 }
 
 IMPORT_RE = re.compile(r"^\s*(?:import\s+([A-Za-z_][A-Za-z0-9_.]*)|from\s+([A-Za-z_][A-Za-z0-9_.]*)\s+import\b)(.*)$")

@@ -399,6 +399,12 @@ SYSTEM_PROMPT = (
     "focus_tables, highlight_tables, clear_highlights, hide_tables, show_tables, show_only_subsystem, "
     "show_all_tables, color_by_subsystem, hide_audit_columns, show_all_columns, fit_view) are executed "
     "IMMEDIATELY on the user's live diagram by the application; you can chain several in one turn.\n\n"
+    "The application draws the DATABASE schema itself (the ER diagram of the TESTR tables). You do NOT draw "
+    "separate UML diagrams (sequence/activity/use case) and you never suggest external diagram tools or paste "
+    "Mermaid/draw.io code. When the user asks to draw/visualize/summarize the schema or its tables, use the "
+    "canvas + logical tools: fit_view / focus_tables / show_all_tables to display the table diagram, and "
+    "get_schema_overview / get_table_info / find_related_tables to explain it. If asked for a UML or non-ERD "
+    "diagram, politely redirect: the assistant is specialized in databases and this app's database schema only.\n\n"
     "Rules:\n"
     "- Reply in the SAME language as the user (Arabic if the user writes Arabic, English otherwise).\n"
     "- Use full table names (e.g. RAF_STUDENTS, COM_ROLES_AUTHORIZATION) when referencing tables.\n"
@@ -807,6 +813,31 @@ def local_respond(messages, context):
         yield from say("\n".join(lines))
         return
 
+    # 8b) Draw / visualize the database tables (ERD) ----------------------------
+    draw_intent = any(k in low for k in ["ارسم", "رسم", "مخطط", "خريطة",
+                                         "draw", "diagram", "schema", "erd"])
+    if draw_intent:
+        # Show all tables on the ERD canvas and provide a structured overview.
+        yield {"type": "action", "name": "show_all_tables", "arguments": {}}
+        yield {"type": "action", "name": "fit_view", "arguments": {}}
+        ov = execute_logical_tool("get_schema_overview", {})
+        sub_lines = []
+        for s in ov.get("subsystems", []):
+            if s.get("tableCount", 0):
+                tbls = ", ".join(s.get("tables", [])[:6])
+                more = f" +{s['tableCount']-6}" if s.get("tableCount", 0) > 6 else ""
+                sub_lines.append(f"  • {s['key']}: {tbls}{more}")
+        if ar:
+            reply = (f"✅ تم إظهار جميع الجداول على مخطط ERD ({ov['tableCount']} جدول).\n\n"
+                     f"📊 الأنظمة الفرعية ({len(sub_lines)}):\n" + "\n".join(sub_lines)
+                     + f"\n\n🔗 {ov['fkCount']} علاقة FK. اسأل عن أي جدول لمعرفة تفاصيله.")
+        else:
+            reply = (f"✅ Showing all {ov['tableCount']} tables on the ERD canvas.\n\n"
+                     f"📊 Subsystems ({len(sub_lines)}):\n" + "\n".join(sub_lines)
+                     + f"\n\n🔗 {ov['fkCount']} FK relationships. Ask about any table for details.")
+        yield from say(reply)
+        return
+
     # 9) Fallback help -------------------------------------------------------
     overview = execute_logical_tool("get_schema_overview", {})
     n_subs = sum(1 for s in overview.get("subsystems", []) if s["tableCount"] > 0)
@@ -864,6 +895,16 @@ def chat_agent(messages, context):
     if provider == "local" or not config.get("api_key"):
         yield from wrap(local_respond(messages, context))
         return
+
+    # Deterministic ERD draw: if the user asks to draw/visualize the schema,
+    # always show the table diagram on the canvas first (handled by the app,
+    # not by the LLM) so every provider reacts identically.
+    low = last_user.lower()
+    draw_intent = any(k in low for k in ["ارسم", "رسم", "مخطط", "خريطة",
+                                         "draw", "diagram", "schema", "erd"])
+    if draw_intent:
+        yield {"type": "action", "name": "show_all_tables", "arguments": {}}
+        yield {"type": "action", "name": "fit_view", "arguments": {}}
 
     # Optionally pre-warm with a lightweight summary the agent can trust
     excerpt = context or ""

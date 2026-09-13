@@ -22,9 +22,6 @@ from app.services import sql_import
 from app.services import sql_export
 from app.services import datadict_import
 from app.services import datadict_export
-from app.services import document_sections
-from app.services import diagram_specs
-from app.ai import diagram_llm
 
 # Initialize SQLite Database
 db.init_db()
@@ -443,16 +440,41 @@ async def extract_document(file: UploadFile = FileParam(...)):
     text = data.decode("utf-8", errors="replace")
     return {"success": True, "format": "text", "text": text, "chars": len(text)}
 
-@app.get("/api/schema/export")
-def export_schema(dialect: str = "mysql", include_drop: bool = True):
-    cached = db.get_cached_schema()
-    if not cached:
+class SchemaExportRequest(BaseModel):
+    tablesData: Dict[str, Any]
+    fkList: List[Dict[str, Any]] = []
+    dialect: str = "mysql"
+    include_drop: bool = True
+
+
+@app.post("/api/schema/export")
+def export_schema(req: SchemaExportRequest):
+    if not req.tablesData:
         raise HTTPException(status_code=404, detail="No schema loaded")
-    payload = sql_export.generate_export_payload(cached["tablesData"], cached["fkList"],
-                                                 dialect=dialect, include_drop=include_drop)
+    fks = [fk for fk in req.fkList
+           if fk.get("child") in req.tablesData and fk.get("parent") in req.tablesData]
+    payload = sql_export.generate_export_payload(req.tablesData, fks,
+                                                 dialect=req.dialect, include_drop=req.include_drop)
     if not payload.get("success"):
         raise HTTPException(status_code=400, detail=payload.get("error", "Export failed"))
     return payload
+
+
+@app.post("/api/dictionary/from-schema")
+def dictionary_from_schema(req: SchemaExportRequest):
+    """Build a dictionary directly from the active workspace, without SQL upload."""
+    if not req.tablesData:
+        raise HTTPException(status_code=400, detail="No tables in the current diagram")
+    fks = [fk for fk in req.fkList
+           if fk.get("child") in req.tablesData and fk.get("parent") in req.tablesData]
+    try:
+        content = datadict_export.build_workbook_bytes(req.tablesData, fks)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not generate dictionary: {e}")
+    return Response(content=content,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="data_dictionary.xlsx"',
+                             "X-Tables": str(len(req.tablesData)), "X-Fks": str(len(fks))})
 
 @app.post("/api/settings/test-db")
 def test_oracle_connection(req: DbTestRequest):
@@ -691,146 +713,6 @@ def ai_chat(payload: Dict[str, Any] = Body(...)):
             yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(generate(), media_type="application/x-ndjson")
-
-# --- UML Diagram Generator (text/folder documentation -> diagrams) ---
-
-_DIAGRAM_LABELS = {
-    "sequence": {"ar": "مخطط تسلسلي (Sequence)", "en": "Sequence Diagram"},
-    "activity": {"ar": "مخطط نشاط (Activity)", "en": "Activity Diagram"},
-    "usecase": {"ar": "مخطط حالات استخدام (Use Case)", "en": "Use Case Diagram"},
-}
-
-@app.get("/api/diagrams/config")
-def diagrams_config():
-    return {
-        "success": True,
-        "types": [
-            {"key": t, "label_ar": _DIAGRAM_LABELS[t]["ar"], "label_en": _DIAGRAM_LABELS[t]["en"]}
-            for t in diagram_specs.TYPES
-        ],
-        "ai": diagram_llm.is_ai_available(),
-    }
-
-
-class DiagramsSectionsRequest(BaseModel):
-    document: str
-
-
-@app.post("/api/diagrams/sections")
-def diagrams_sections(req: DiagramsSectionsRequest):
-    sections = document_sections.split_sections(req.document or "")
-    return {"success": True, "sections": sections, "chars": len(req.document or "")}
-
-
-class DiagramGenerateRequest(BaseModel):
-    document: str
-    section: Optional[Any] = None
-    selection: Optional[str] = None
-    diagram_type: str
-    name: Optional[str] = None
-    prefer_llm: bool = True
-
-
-def _has_body(section):
-    """A section with a real body — not just a bare heading/title line."""
-    c = (section.get("content") or "").strip()
-    if len(c) < 30:
-        return False
-    return c != (section.get("title") or "").strip()
-
-
-def _build_diagram_payload(text, diagram_type, prefer_llm, name, section_info):
-    spec, provider, warnings = diagram_llm.generate(text, diagram_type, prefer_llm=prefer_llm)
-    out = diagram_specs.payload(spec, name=name or f"{diagram_type}-diagram")
-    out["provider"] = provider
-    out["warnings"] = warnings
-    if section_info:
-        out["section"] = section_info
-    return out
-
-
-@app.post("/api/diagrams/generate")
-def diagram_generate(req: DiagramGenerateRequest):
-    src = (req.document or "").strip()
-    if not src:
-        raise HTTPException(status_code=400, detail="لا يوجد نص قابل للتحليل. (No usable text.)")
-
-    # 1) Explicit text selection inside the pasted document -> diagram that exact chunk
-    if req.selection and req.selection.strip():
-        try:
-            return _build_diagram_payload(
-                req.selection.strip(), req.diagram_type, req.prefer_llm,
-                req.name, {"index": None, "title": "الجزء المحدد (Selected text)", "source": "selection"})
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    sections = document_sections.split_sections(src)
-
-    # 2) A specific auto-detected section
-    if req.section is not None:
-        sec = document_sections.find_section(sections, req.section)
-        if not sec:
-            raise HTTPException(status_code=400, detail="لم نعثر على القسم المطلوب. (Section not found.)")
-        try:
-            return _build_diagram_payload(
-                sec["content"], req.diagram_type, req.prefer_llm, req.name,
-                {"index": sec["index"], "title": sec["title"], "source": "section"})
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
-    # 3) Whole document fallback
-    whole = "\n".join(s["content"] for s in sections).strip()
-    if not whole:
-        raise HTTPException(status_code=400, detail="لا يوجد نص قابل للتحليل. (No usable text.)")
-    try:
-        return _build_diagram_payload(
-            whole, req.diagram_type, req.prefer_llm, req.name,
-            {"index": None, "title": "الوثيقة كاملة (Full document)", "source": "full"})
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-class DiagramGenerateAllRequest(BaseModel):
-    document: str
-    sections: Optional[List[Any]] = None
-    diagram_type: str
-    prefer_llm: bool = True
-
-
-@app.post("/api/diagrams/generate-all")
-def diagram_generate_all(req: DiagramGenerateAllRequest):
-    src = (req.document or "").strip()
-    if not src:
-        raise HTTPException(status_code=400, detail="لا يوجد نص قابل للتحليل. (No usable text.)")
-    sections = document_sections.split_sections(src)
-    if not sections:
-        raise HTTPException(status_code=400, detail="لا يوجد نص قابل للتحليل. (No usable text.)")
-
-    wanted = req.sections
-    chosen = []
-    if wanted:
-        for s in sections:
-            if s["index"] in [int(x) for x in wanted] or s["title"] in [str(x) for x in wanted]:
-                chosen.append(s)
-    else:
-        chosen = [s for s in sections if _has_body(s)]
-
-    skipped = len(sections) - len(chosen)
-
-    diagrams = []
-    for sec in chosen:
-        try:
-            out = _build_diagram_payload(
-                sec["content"], req.diagram_type, req.prefer_llm,
-                None, {"index": sec["index"], "title": sec["title"], "source": "section"})
-            diagrams.append(out)
-        except ValueError as e:
-            diagrams.append({"success": False, "section": {"index": sec["index"], "title": sec["title"]},
-                             "error": str(e)})
-    if not diagrams:
-        raise HTTPException(status_code=400, detail="لا توجد أقسام للرسم. (No sections to draw.)")
-    return {"success": True, "diagram_type": req.diagram_type, "count": len(diagrams),
-            "total_sections": len(sections), "skipped": skipped, "diagrams": diagrams}
 
 
 # Mount Static Frontend

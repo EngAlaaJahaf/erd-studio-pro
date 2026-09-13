@@ -1,16 +1,15 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TESTR ERD Studio Pro - Standalone App</title>
+<title>ERD Studio Pro — Enterprise Database Designer</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Tajawal:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
   
   :root {
     --primary: #0f172a;
     --primary-foreground: #f8fafc;
-    --accent: #0284c7;
     --accent-hover: #0369a1;
     --accent-light: #f0f9ff;
     --bg: #f8fafc;
@@ -148,19 +147,22 @@
   .side-section.flush .side-section-body { flex: 1; min-height: 0; overflow: hidden; }
 
   /* ==================== WORKSPACE TAB BAR (multi-page diagrams) ==================== */
-  .ws-bar { position: relative; z-index: 5; display: flex; align-items: stretch; gap: 6px; padding: 7px 16px 0; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: thin; }
-  .ws-bar::-webkit-scrollbar { height: 4px; }
-  .ws-tab { display: flex; align-items: center; gap: 7px; padding: 7px 6px 9px 12px; margin-bottom: -1px; border-radius: 10px 10px 0 0; border: 1px solid var(--border); border-bottom: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; max-width: 240px; transition: all 0.15s ease; }
+  .ws-bar { position: relative; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .ws-tabs-wrapper { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: thin; flex: 1 1 auto; min-width: 0; padding-bottom: 1px; }
+  .ws-tabs-wrapper::-webkit-scrollbar { height: 3px; }
+  .ws-quick-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-inline-start: 8px; }
+  .ws-tab { display: flex; align-items: center; gap: 7px; padding: 6px 6px 7px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; max-width: 240px; transition: all 0.15s ease; }
   .ws-tab:hover { background: var(--accent-light); color: var(--text); }
-  .ws-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 -3px 10px -4px rgba(2,132,199,.35); }
+  .ws-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 2px 8px -2px rgba(2,132,199,.4); }
   .ws-tab-icon { font-size: 13px; line-height: 1; }
   .ws-tab-name { overflow: hidden; text-overflow: ellipsis; }
   .ws-tab-actions { display: flex; align-items: center; gap: 2px; margin-left: 2px; }
   .ws-tab-x, .ws-tab-open { border: none; background: transparent; color: inherit; opacity: 0.6; cursor: pointer; font-size: 11px; padding: 2px 4px; border-radius: 5px; line-height: 1; }
   .ws-tab-x:hover, .ws-tab-open:hover { opacity: 1; background: rgba(127,127,127,0.25); }
-  .ws-add { display: flex; align-items: center; gap: 5px; padding: 0 13px; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; background: transparent; }
+  .ws-add { display: flex; align-items: center; gap: 5px; padding: 5px 11px; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 11.5px; font-weight: 800; cursor: pointer; white-space: nowrap; background: transparent; }
   .ws-add:hover { color: var(--accent); border-color: var(--accent); }
   .ws-src-chip { font-size: 9.5px; font-weight: 800; padding: 1px 7px; border-radius: 20px; background: rgba(255,255,255,0.25); letter-spacing: 0.03em; text-transform: uppercase; }
+  @media (max-width: 800px) { .hide-mobile { display: none; } }
 
   /* new-page / source modal */
   .newpage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 12px; }
@@ -993,7 +995,7 @@
     top: 0;
     left: 0;
     bottom: 0;
-    width: 360px;
+    width: var(--ai-panel-w, 360px);
     background: var(--card);
     border-right: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
@@ -1004,6 +1006,29 @@
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
   body[dir="ltr"] .ai-panel { left: auto; right: 0; border-right: none; border-left: 1px solid var(--border); transform: translateX(100%); }
+  .ai-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    background: transparent;
+    cursor: ew-resize;
+    z-index: 130;
+    touch-action: none;
+  }
+  .ai-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    transition: all 0.15s;
+  }
+  body:not([dir="ltr"]) .ai-resize-handle { right: -5px; }
+  body:not([dir="ltr"]) .ai-resize-handle::after { right: 2px; }
+  body[dir="ltr"] .ai-resize-handle { left: -5px; }
+  body[dir="ltr"] .ai-resize-handle::after { left: 2px; }
+  .ai-resize-handle:hover::after, .ai-resize-handle:active::after { opacity: 1; width: 3px; }
   .ai-panel.open { transform: translateX(0); }
   .ai-header {
     display: flex;
@@ -1050,97 +1075,6 @@
   .table-node.is-highlighted .er.attributeBoxOdd,
   .table-node.is-highlighted .er.attributeBoxEven { stroke-width: 1.6px; }
 
-  /* ==================== UML STUDIO PANEL ==================== */
-  .uml-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 560px;
-    max-width: 96vw;
-    background: var(--card);
-    border-left: 1px solid var(--border);
-    box-shadow: var(--shadow-lg);
-    z-index: 121;
-    display: flex;
-    flex-direction: column;
-    transform: translateX(100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  body[dir="ltr"] .uml-panel { right: auto; left: 0; border-left: none; border-right: 1px solid var(--border); transform: translateX(-100%); }
-  body[dir="ltr"] .uml-panel.open { transform: translateX(0); }
-  .uml-panel.open { transform: translateX(0); }
-  .uml-header {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--bg);
-  }
-  .uml-header-title { font-size: 13px; font-weight: 800; }
-  .uml-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-  .uml-card { border: 1px solid var(--border-subtle); background: var(--bg); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .uml-card-title { font-size: 11px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.02em; }
-  .uml-textarea {
-    width: 100%; min-height: 120px; resize: vertical; font-family: inherit; font-size: 12px; line-height: 1.6;
-    padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); outline: none;
-  }
-  .uml-tool-row { display: flex; gap: 6px; flex-wrap: wrap; }
-  .uml-btn {
-    font-size: 11px; font-weight: 700; padding: 6px 10px; border: 1px solid var(--border);
-    border-radius: 7px; background: var(--card); color: var(--text); cursor: pointer; transition: all 0.12s;
-  }
-  .uml-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .uml-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .uml-btn.primary:hover { filter: brightness(1.08); color: #fff; }
-  .uml-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
-  .uml-sec-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; }
-  .uml-sec-item {
-    display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid var(--border-subtle);
-    border-radius: 7px; cursor: pointer; font-size: 11.5px; background: var(--card);
-  }
-  .uml-sec-item:hover { border-color: var(--accent); }
-  .uml-sec-item.selected { border-color: var(--accent); background: var(--accent-light); }
-  .uml-sec-item input { accent-color: var(--accent); }
-  .uml-sec-idx { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-subtle); flex: 0 0 auto; }
-  .uml-sec-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .uml-sec-chars { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-subtle); flex: 0 0 auto; }
-  .uml-out-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; }
-  .uml-tab {
-    font-size: 10.5px; font-weight: 700; padding: 4px 10px; border-radius: 6px; cursor: pointer; color: var(--text-muted);
-    border: 1px solid transparent;
-  }
-  .uml-tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
-  .uml-out { min-height: 240px; max-height: 420px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--card); }
-  .uml-out pre { margin: 0; padding: 10px; font-family: var(--font-mono); font-size: 10.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text; }
-  .uml-mermaid-wrap { padding: 10px; display: flex; justify-content: center; }
-  .uml-mermaid-wrap svg, .uml-mermaid-wrap .mermaid svg { max-width: 100%; height: auto; }
-  .uml-provider { font-size: 9.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(99, 102, 241, 0.12); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3); }
-  .uml-provider.local { background: rgba(245, 158, 11, 0.12); color: #d97706; border-color: rgba(245, 158, 11, 0.3); }
-  .uml-provider.llm { background: rgba(16, 185, 129, 0.12); color: #059669; border-color: rgba(16, 185, 129, 0.3); }
-  .uml-warning { font-size: 10.5px; color: #d97706; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 7px; padding: 6px 9px; }
-  .uml-hint { font-size: 10px; color: var(--text-subtle); font-style: italic; }
-  .uml-sec-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow-y: auto; }
-  .uml-chip {
-    font-size: 10.5px; font-weight: 700; color: var(--text-muted); cursor: pointer;
-    border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 4px 11px;
-    transition: all 0.12s; white-space: nowrap; max-width: 100%;
-  }
-  .uml-chip:hover { border-color: var(--accent); color: var(--accent); }
-  .uml-chip.selected { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
-  .uml-chip .chip-idx { font-family: var(--font-mono); font-size: 9px; opacity: 0.7; margin-inline-end: 4px; }
-  .uml-selection-hint {
-    font-size: 10.5px; padding: 6px 9px; border-radius: 7px; background: rgba(99, 102, 241, 0.1);
-    border: 1px dashed rgba(99, 102, 241, 0.45); color: #6366f1;
-  }
-  .uml-out-cards { display: flex; flex-direction: column; gap: 10px; }
-  .uml-out-card { border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-  .uml-out-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-  .uml-out-card-title { font-size: 12px; font-weight: 800; flex: 1; min-width: 0; }
-  .uml-out-card-actions { display: flex; gap: 5px; flex-wrap: wrap; }
-  .uml-code-strip {
-    font-family: var(--font-mono); font-size: 10.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
-    background: var(--card); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; margin: 0;
-    max-height: 260px; overflow: auto; color: var(--text); user-select: text;
-  }
-  .uml-err-card { border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.06); color: #ef4444; border-radius: 10px; padding: 10px; font-size: 11.5px; }
 </style>
 </head>
 <body>
@@ -1256,11 +1190,6 @@
       <!-- AI Assistant Toggle -->
       <button class="btn-tool" id="aiToggleBtn" onclick="toggleAIPanel()" title="AI Assistant">
         🤖 AI
-      </button>
-
-      <!-- UML Studio Toggle (hidden) -->
-      <button class="btn-tool" id="umlToggleBtn" onclick="toggleUmlPanel()" title="UML Diagrams Generator" style="display:none;">
-        📊 UML
       </button>
 
       <!-- Subsystems Legend Toggle -->
@@ -1558,15 +1487,20 @@
           <div class="accordion-card">
             <div class="accordion-head" onclick="toggleAccordion(this)">
               <span class="acc-icon">📖</span>
-              <span class="acc-title" id="i18n-expDictTitle">توليد قاموس بيانات من الكود</span>
+              <span class="acc-title" id="i18n-expDictTitle">قاموس البيانات (Data Dictionary .xlsx)</span>
               <span class="acc-chev">▾</span>
             </div>
             <div class="accordion-body">
-              <div class="form-hint">افتح كود <b>SQL</b> (ملفًا أو أكثر بصيغة .sql / .ddl / .txt) وسيولّد التطبيق منه قاموس بيانات <b>.xlsx</b> بنفس صيغة الاستيراد — يمكنك تعديله ثم إعادة استيراده في صفحة الاستيراد.</div>
+              <div class="form-hint" id="i18n-expDictHint">توليد قاموس بيانات Excel (.xlsx) منسق ومفصل يحتوي على كافة الجداول، الحقول، الأنواع، المفاتيح الأساسية والعلاقات للمخطط الحالي مباشرة، أو من ملفات كود خارجية.</div>
+              <div class="actions" style="margin-bottom: 10px;">
+                <button class="btn-tool primary" onclick="runQuickAction('dictionary')">⚡ <span id="i18n-expDictDirectBtn">توليد وتنزيل القاموس من المخطط الحالي مباشرة (.xlsx)</span></button>
+              </div>
+              <div style="border-top:1px dashed var(--border); margin: 12px 0 10px;"></div>
+              <div class="form-hint" id="i18n-expDictUploadHint">أو توليد القاموس من ملفات SQL خارجية مرفوعة:</div>
               <div class="actions">
-                <button class="btn-tool" onclick="document.getElementById('ddSqlFileInput').click()">📂 <span>اختيار ملفات الكود</span></button>
+                <button class="btn-tool" onclick="document.getElementById('ddSqlFileInput').click()">📂 <span id="i18n-expDictChooseFiles">اختيار ملفات الكود</span></button>
                 <input type="file" id="ddSqlFileInput" accept=".sql,.ddl,.txt" style="display:none" multiple onchange="setDdSqlFile(this)">
-                <button class="btn-tool primary" onclick="exportDataDictionaryFromSql()">📥 <span>توليد وتنزيل القاموس (.xlsx)</span></button>
+                <button class="btn-tool" onclick="exportDataDictionaryFromSql()">📥 <span id="i18n-expDictFromFilesBtn">توليد من الملفات (.xlsx)</span></button>
               </div>
               <div id="ddSqlFileList" class="form-hint" style="margin-top:6px"></div>
               <div id="ddSqlExportInfo" class="form-hint"></div>
@@ -1806,6 +1740,7 @@
 
 <!-- AI ASSISTANT PANEL -->
 <div class="ai-panel" id="aiPanel">
+  <div class="ai-resize-handle" id="aiResizeHandle" title="اسحب لتغيير عرض اللوحة"></div>
   <div class="ai-header">
     <div style="display:flex; align-items:center; gap:8px;">
       <strong class="ai-header-title" id="aiTitleText">🤖 Smart Assistant</strong>
@@ -1825,56 +1760,6 @@
   </div>
 </div>
 
-<!-- ==================== UML STUDIO PANEL ==================== -->
-<div class="uml-panel" id="umlPanel">
-  <div class="uml-header">
-    <div style="display:flex; align-items:center; gap:8px;">
-      <strong class="uml-header-title" id="umlTitleText">📊 UML Studio</strong>
-      <span class="uml-provider local" id="umlProvider">Extractor</span>
-    </div>
-    <div class="ai-header-actions">
-      <button class="ai-clear-btn" onclick="clearUml()" title="Clear">🗑️</button>
-      <button class="modal-close" onclick="toggleUmlPanel()">✕</button>
-    </div>
-  </div>
-
-  <div class="uml-body">
-    <div class="uml-card">
-      <div class="uml-card-title" id="umlLblInput">📄 Project Documentation</div>
-      <textarea id="umlText" class="uml-textarea" placeholder="الصق وثيقة مشروعك هنا... أو حمّل ملفاً"></textarea>
-      <div id="umlSelHint" class="uml-selection-hint" style="display:none;"></div>
-      <div class="uml-tool-row">
-        <label class="uml-btn" style="cursor:pointer;">
-          📁 <span id="umlLblFile">File</span>
-          <input type="file" id="umlFile" accept=".txt,.md,.mdx,.docx" style="display:none;" />
-        </label>
-        <button class="uml-btn" onclick="loadUmlSample()" id="umlSampleBtn">📋 Sample</button>
-        <button class="uml-btn" onclick="detectUmlSections()" id="umlSectionsBtn">🔍 Analyze Sections</button>
-      </div>
-      <div class="uml-hint" id="umlHint">الصق الوثيقة كاملة: تُكتشف الأقسام، وتولَّد المخططات تلقائياً. حدّد أي جزء من النص لتوليد مخطط منه مباشرة.</div>
-    </div>
-
-    <div class="uml-card">
-      <div class="uml-card-title" id="umlLblSelect">🧩 الأقسام المكتشفة — اختر بعضها أو اترك الكل</div>
-      <div class="uml-sec-chips" id="umlSecChips">
-        <span class="uml-chip" data-all="1">✨ الكل</span>
-      </div>
-      <div class="uml-tool-row">
-        <button class="uml-btn" data-type="sequence" onclick="pickUmlType('sequence')">🔁 <span id="umlT-seq">Sequence</span></button>
-        <button class="uml-btn" data-type="activity" onclick="pickUmlType('activity')">🧭 <span id="umlT-activity">Activity</span></button>
-        <button class="uml-btn" data-type="usecase" onclick="pickUmlType('usecase')">🎬 <span id="umlT-usecase">Use Case</span></button>
-      </div>
-      <div class="uml-tool-row">
-        <button class="uml-btn primary" onclick="generateUml()" id="umlGenerateBtn">⚡ Generate Diagrams</button>
-      </div>
-      <div class="uml-status" id="umlStatus"></div>
-    </div>
-
-    <div id="umlOutCards" class="uml-out-cards"></div>
-  </div>
-</div>
-
-<script src="/vendor/mermaid.min.js"></script>
 <script>
 // --- Embedded Fallback Metadata ---
 let tablesData = {"COM_ACCOUNTS": {"columns": [{"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "USERNAME", "type": "VARCHAR2(400)"}, {"name": "EMAIL", "type": "VARCHAR2(1020)"}, {"name": "PASSWORD_HASH", "type": "VARCHAR2(4000)"}, {"name": "FIRST_NAME", "type": "VARCHAR2(200)"}, {"name": "SECOND_NAME", "type": "VARCHAR2(200)"}, {"name": "THIRD_NAME", "type": "VARCHAR2(200)"}, {"name": "FOURTH_NAME", "type": "VARCHAR2(400)"}, {"name": "LAST_NAME", "type": "VARCHAR2(200)"}, {"name": "FULL_NAME", "type": "VARCHAR2(1600)"}, {"name": "PREFERRED_NAME", "type": "VARCHAR2(1000)"}, {"name": "MOBILE", "type": "VARCHAR2(80)"}, {"name": "PROFILE_IMAGE", "type": "BLOB"}, {"name": "PROFILE_IMAGE_FILENAME", "type": "VARCHAR2(1020)"}, {"name": "PROFILE_IMAGE_MIMETYPE", "type": "VARCHAR2(400)"}, {"name": "PROFILE_IMAGE_LAST_UPDATE", "type": "DATE"}, {"name": "ACCOUNT_STATUS", "type": "VARCHAR2(80)"}, {"name": "ROLE_ID", "type": "NVARCHAR2(100)"}, {"name": "IS_FIRST_LOGIN", "type": "CHAR"}, {"name": "FIRST_LOGIN_DATE", "type": "TIMESTAMP"}, {"name": "LAST_LOGIN", "type": "TIMESTAMP"}, {"name": "LOGIN_COUNT", "type": "NUMBER"}, {"name": "LAST_IP_ADDRESS", "type": "VARCHAR2(180)"}, {"name": "PREFERRED_BROWSER", "type": "VARCHAR2(400)"}, {"name": "TIME_ZONE", "type": "VARCHAR2(200)"}, {"name": "DEVICE_FINGERPRINT", "type": "VARCHAR2(1020)"}, {"name": "EMAIL_VERIFIED", "type": "CHAR"}, {"name": "PASSWORD_RESET_CODE", "type": "VARCHAR2(400)"}, {"name": "RESET_CODE_EXPIRY", "type": "TIMESTAMP"}, {"name": "RESET_CODE_USED_AT", "type": "TIMESTAMP"}, {"name": "REVIEW_NOTES", "type": "VARCHAR2(4000)"}, {"name": "REVIEWED_BY", "type": "VARCHAR2(1020)"}, {"name": "REVIEWED_AT", "type": "TIMESTAMP"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "LAST_ACTIVITY", "type": "TIMESTAMP"}, {"name": "EMAIL_VERIFICATION_TOKEN", "type": "VARCHAR2(100)"}, {"name": "EMAIL_VERIFICATION_EXPIRY", "type": "TIMESTAMP"}, {"name": "GENDER", "type": "VARCHAR2(1)"}], "pks": ["ACCOUNT_ID"]}, "COM_AUTHORIZATION_DESC": {"columns": [{"name": "CODE", "type": "VARCHAR2(4000)"}, {"name": "DESCRIPTION_AR", "type": "VARCHAR2(4000)"}, {"name": "DESCRIPTION_EN", "type": "VARCHAR2(4000)"}, {"name": "APPLICATION_ID", "type": "NUMBER"}, {"name": "PAGE_ID", "type": "NUMBER"}, {"name": "COMPONENT_TYPE", "type": "VARCHAR2(200)"}, {"name": "COMPONENT_NAME", "type": "VARCHAR2(4000)"}, {"name": "AUTHORIZATION_SCHEME", "type": "VARCHAR2(1040)"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_ACTIVE", "type": "VARCHAR2(1)"}], "pks": ["CODE"]}, "COM_ERROR_LOGS": {"columns": [{"name": "ERROR_ID", "type": "NUMBER"}, {"name": "ERROR_CODE", "type": "NUMBER"}, {"name": "ERROR_MESSAGE", "type": "VARCHAR2(4000)"}, {"name": "ERROR_BACKTRACE", "type": "CLOB"}, {"name": "ERROR_CALLSTACK", "type": "CLOB"}, {"name": "MODULE_NAME", "type": "VARCHAR2(1020)"}, {"name": "PROCEDURE_NAME", "type": "VARCHAR2(1020)"}, {"name": "LINE_NUMBER", "type": "NUMBER"}, {"name": "USER_ID", "type": "NUMBER"}, {"name": "IP_ADDRESS", "type": "VARCHAR2(180)"}, {"name": "ERROR_TIME", "type": "TIMESTAMP"}, {"name": "SEVERITY", "type": "VARCHAR2(80)"}, {"name": "RESOLVED", "type": "CHAR"}, {"name": "RESOLVED_BY", "type": "VARCHAR2(1020)"}, {"name": "RESOLVED_AT", "type": "TIMESTAMP"}, {"name": "NOTES", "type": "VARCHAR2(4000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}], "pks": ["ERROR_ID"]}, "COM_LOOKUP_TYPES": {"columns": [{"name": "TYPE_ID", "type": "NUMBER"}, {"name": "TYPE_CODE", "type": "VARCHAR2(400)"}, {"name": "TYPE_NAME_AR", "type": "NVARCHAR2(255)"}, {"name": "TYPE_NAME_EN", "type": "VARCHAR2(1020)"}, {"name": "PARENT_TYPE_ID", "type": "NUMBER"}, {"name": "DESCRIPTION", "type": "VARCHAR2(2000)"}, {"name": "ICON", "type": "VARCHAR2(200)"}, {"name": "SORT_ORDER", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "COLOR_CODE", "type": "CHAR"}], "pks": ["TYPE_ID"]}, "COM_LOOKUP_VALUES": {"columns": [{"name": "VALUE_ID", "type": "NUMBER"}, {"name": "LOOKUP_TYPE_ID", "type": "NUMBER"}, {"name": "VALUE_CODE", "type": "VARCHAR2(400)"}, {"name": "VALUE_NAME_AR", "type": "NVARCHAR2(255)"}, {"name": "VALUE_NAME_EN", "type": "VARCHAR2(1020)"}, {"name": "PARENT_VALUE_ID", "type": "NUMBER"}, {"name": "COLOR_CODE", "type": "VARCHAR2(200)"}, {"name": "ICON", "type": "VARCHAR2(200)"}, {"name": "SORT_ORDER", "type": "NUMBER"}, {"name": "IS_CHANGABLE", "type": "CHAR"}, {"name": "COMMENTS", "type": "VARCHAR2(4000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["VALUE_ID"]}, "COM_MENU_DATA": {"columns": [{"name": "LIST_ENTRY_ID", "type": "NUMBER"}, {"name": "PARENT_ENTRY_TEXT", "type": "VARCHAR2(4000)"}, {"name": "ENTRY_TEXT", "type": "VARCHAR2(4000)"}, {"name": "ENTRY_IMAGE", "type": "VARCHAR2(4000)"}, {"name": "ENTRY_TARGET", "type": "VARCHAR2(4000)"}, {"name": "APPLICATION_ID", "type": "NUMBER"}, {"name": "DISPLAY_SEQUENCE", "type": "NUMBER"}, {"name": "LIST_NAME", "type": "VARCHAR2(255)"}, {"name": "TRANSLATED_APP_LANGUAGE", "type": "VARCHAR2(30)"}, {"name": "PAGE_NUMBER", "type": "NUMBER"}, {"name": "LIST_ENTRY_PARENT_ID", "type": "NUMBER"}], "pks": []}, "COM_NOTIFICATION_APP_LINKS": {"columns": [{"name": "LINK_ID", "type": "NUMBER"}, {"name": "TEMPLATE_ID", "type": "NUMBER"}, {"name": "APP_ID", "type": "NUMBER"}, {"name": "APP_PAGE", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "ITEM_NAMES", "type": "VARCHAR2(4000)"}, {"name": "VALUE_SOURCE", "type": "VARCHAR2(4000)"}], "pks": ["LINK_ID"]}, "COM_NOTIFICATION_TEMPLATES": {"columns": [{"name": "TEMPLATE_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "TEMPLATE_NAME", "type": "NVARCHAR2(255)"}, {"name": "TEMPLATE_CODE", "type": "VARCHAR2(200)"}, {"name": "MESSAGE_TEMPLATE_AR", "type": "CLOB"}, {"name": "MESSAGE_TEMPLATE_EN", "type": "CLOB"}, {"name": "LKP_NOTIFICATION_TYPE", "type": "VARCHAR2(200)"}, {"name": "RELATED_ENTITY", "type": "VARCHAR2(200)"}, {"name": "DEFAULT_SEND_SCOPE", "type": "VARCHAR2(80)"}, {"name": "ALLOW_SCHEDULING", "type": "CHAR"}, {"name": "SUPPORTS_ATTACHMENT", "type": "CHAR"}, {"name": "MSG_PARAMETERS", "type": "VARCHAR2(4000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["TEMPLATE_ID"]}, "COM_ROLES_AUTHORIZATION": {"columns": [{"name": "ROLES_AUTH_ID", "type": "NUMBER"}, {"name": "LKP_ROLE", "type": "VARCHAR2(40)"}, {"name": "LKP_SECURITY_GROUP", "type": "VARCHAR2(40)"}, {"name": "AUTHORIZATION_CODE", "type": "VARCHAR2(400)"}, {"name": "APPLICATION_ID", "type": "NUMBER"}, {"name": "PAGE_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["ROLES_AUTH_ID"]}, "COM_SECURITY_GROUP_PAGES": {"columns": [{"name": "SECURITY_GROUP_PAGE_ID", "type": "NUMBER"}, {"name": "APPLICATION_ID", "type": "NUMBER"}, {"name": "PAGE_ID", "type": "NUMBER"}, {"name": "LKP_SECURITY_GROUP", "type": "VARCHAR2(40)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SECURITY_GROUP_PAGE_ID"]}, "COM_SECURITY_GROUPS_AUTHORIZATION": {"columns": [{"name": "SECURITY_GROUP_AUTH_ID", "type": "NUMBER"}, {"name": "AUTHORIZATION_CODE", "type": "VARCHAR2(400)"}, {"name": "LKP_SECURITY_GROUP", "type": "VARCHAR2(40)"}, {"name": "APPLICATION_ID", "type": "NUMBER"}, {"name": "PAGE_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SECURITY_GROUP_AUTH_ID"]}, "COM_SECURITY_GROUPS_ROLES": {"columns": [{"name": "SECURITY_GROUP_ROLE_ID", "type": "NUMBER"}, {"name": "LKP_SECURITY_GROUP", "type": "VARCHAR2(40)"}, {"name": "LKP_ROLE", "type": "VARCHAR2(40)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SECURITY_GROUP_ROLE_ID"]}, "COM_SETTING_CATEGORIES": {"columns": [{"name": "CATEGORY_ID", "type": "NUMBER"}, {"name": "CATEGORY_CODE", "type": "VARCHAR2(400)"}, {"name": "CATEGORY_NAME_AR", "type": "NVARCHAR2(255)"}, {"name": "CATEGORY_NAME_EN", "type": "VARCHAR2(1020)"}, {"name": "ICON", "type": "VARCHAR2(200)"}, {"name": "SORT_ORDER", "type": "NUMBER"}, {"name": "DESCRIPTION", "type": "VARCHAR2(2000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["CATEGORY_ID"]}, "COM_SETTINGS": {"columns": [{"name": "SETTING_ID", "type": "NUMBER"}, {"name": "CATEGORY_ID", "type": "NUMBER"}, {"name": "SETTING_CODE", "type": "VARCHAR2(1200)"}, {"name": "SETTING_NAME_AR", "type": "NVARCHAR2(300)"}, {"name": "SETTING_NAME_EN", "type": "VARCHAR2(1200)"}, {"name": "SETTING_TYPE", "type": "VARCHAR2(200)"}, {"name": "DATA_TYPE", "type": "VARCHAR2(120)"}, {"name": "DEFAULT_VALUE", "type": "VARCHAR2(4000)"}, {"name": "POSSIBLE_VALUES", "type": "CLOB"}, {"name": "VALIDATION_RULE", "type": "VARCHAR2(4000)"}, {"name": "UI_COMPONENT", "type": "VARCHAR2(200)"}, {"name": "PLACEHOLDER_AR", "type": "NVARCHAR2(300)"}, {"name": "PLACEHOLDER_EN", "type": "VARCHAR2(1200)"}, {"name": "HELP_TEXT_AR", "type": "NVARCHAR2(1000)"}, {"name": "HELP_TEXT_EN", "type": "VARCHAR2(4000)"}, {"name": "SORT_ORDER", "type": "NUMBER"}, {"name": "IS_PUBLIC", "type": "CHAR"}, {"name": "IS_SYSTEM", "type": "CHAR"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SETTING_ID"]}, "COM_SYSTEM_NOTIFICATIONS": {"columns": [{"name": "NOTIF_ID", "type": "NUMBER"}, {"name": "TEMPLATE_ID", "type": "NUMBER"}, {"name": "RECIPIENT_USERNAME", "type": "VARCHAR2(400)"}, {"name": "MESSAGE", "type": "VARCHAR2(4000)"}, {"name": "NOTIFICATION_TYPE", "type": "VARCHAR2(200)"}, {"name": "NOTIFICATION_STATUS", "type": "VARCHAR2(80)"}, {"name": "APP_ID", "type": "NUMBER"}, {"name": "PAGE_ID", "type": "NUMBER"}, {"name": "RECORD_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["NOTIF_ID"]}, "COM_USER_AUTHORIZATIONS": {"columns": [{"name": "USER_AUTH_ID", "type": "NUMBER"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "AUTHORIZATION_CODE", "type": "VARCHAR2(4000)"}, {"name": "LKP_ROLE", "type": "VARCHAR2(40)"}, {"name": "SOURCE_ROLE_PRIV_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["USER_AUTH_ID"]}, "COM_USER_SESSIONS_TRACKING": {"columns": [{"name": "SESSION_ID", "type": "NUMBER"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "USERNAME", "type": "VARCHAR2(255)"}, {"name": "LOGIN_TIME", "type": "TIMESTAMP"}, {"name": "LOGOUT_TIME", "type": "TIMESTAMP"}, {"name": "IP_ADDRESS", "type": "VARCHAR2(45)"}, {"name": "USER_AGENT", "type": "VARCHAR2(1000)"}, {"name": "BROWSER_TYPE", "type": "VARCHAR2(100)"}, {"name": "OS_PLATFORM", "type": "VARCHAR2(100)"}, {"name": "DEVICE_TYPE", "type": "VARCHAR2(50)"}, {"name": "SESSION_DURATION", "type": "NUMBER"}, {"name": "STATUS", "type": "VARCHAR2(20)"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "LAST_ACTIVITY", "type": "TIMESTAMP"}], "pks": ["SESSION_ID"]}, "COM_USERS_ROLES": {"columns": [{"name": "USER_ROLE_ID", "type": "NUMBER"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "LKP_ROLE", "type": "VARCHAR2(400)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["USER_ROLE_ID"]}, "RAF_ACADEMIC_WEEKS": {"columns": [{"name": "WEEK_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "WEEK_ORDER", "type": "NUMBER"}, {"name": "WEEK_NAME", "type": "NVARCHAR2(100)"}, {"name": "START_DATE", "type": "DATE"}, {"name": "END_DATE", "type": "DATE"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["WEEK_ID"]}, "RAF_AI_RECOMMENDATIONS_LOG": {"columns": [{"name": "LOG_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "RECOMMENDATION_DATE", "type": "TIMESTAMP"}, {"name": "RECOMMENDATION_TEXT", "type": "VARCHAR2(4000)"}, {"name": "RECOMMENDATION_TYPE", "type": "VARCHAR2(50)"}, {"name": "ACTION_TAKEN", "type": "CHAR"}, {"name": "ACTION_DATE", "type": "TIMESTAMP"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}], "pks": ["LOG_ID"]}, "RAF_ASSIGNMENTS": {"columns": [{"name": "ASSIGN_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "GROUP_ID", "type": "NUMBER"}, {"name": "INSTRUCTOR_ID", "type": "NUMBER"}, {"name": "LECTURE_ID", "type": "NUMBER"}, {"name": "ASSIGN_TITLE", "type": "NVARCHAR2(255)"}, {"name": "ASSIGN_DESCRIPTION", "type": "CLOB"}, {"name": "ASSIGN_TYPE", "type": "VARCHAR2(50)"}, {"name": "ASSIGN_DATE", "type": "DATE"}, {"name": "DUE_DATE", "type": "DATE"}, {"name": "LATE_SUBMISSION", "type": "CHAR"}, {"name": "CUTOFF_DATE", "type": "DATE"}, {"name": "MAX_SCORE", "type": "NUMBER"}, {"name": "PASSING_SCORE", "type": "NUMBER"}, {"name": "IS_PUBLISHED", "type": "CHAR"}, {"name": "PUBLISHED_DATE", "type": "DATE"}, {"name": "ASSIGN_FILE", "type": "BLOB"}, {"name": "ASSIGN_FILE_NAME", "type": "VARCHAR2(255)"}, {"name": "ASSIGN_FILE_TYPE", "type": "VARCHAR2(100)"}, {"name": "VISIBILITY", "type": "VARCHAR2(20)"}, {"name": "NOTES", "type": "VARCHAR2(1000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["ASSIGN_ID"]}, "RAF_ATTENDANCE": {"columns": [{"name": "ATTENDANCE_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "LECTURE_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "ATTENDANCE_STATUS", "type": "VARCHAR2(20)"}, {"name": "ATTENDANCE_TIME", "type": "TIMESTAMP"}, {"name": "ENTRY_METHOD", "type": "VARCHAR2(20)"}, {"name": "CONDUCTED_BY_ACCOUNT_ID", "type": "NUMBER"}, {"name": "QR_TOKEN_USED", "type": "VARCHAR2(100)"}, {"name": "SESSION_ID", "type": "NUMBER"}, {"name": "DEVICE_FINGERPRINT", "type": "VARCHAR2(64)"}, {"name": "SCAN_LATITUDE", "type": "NUMBER"}, {"name": "SCAN_LONGITUDE", "type": "NUMBER"}, {"name": "SCAN_IP_ADDRESS", "type": "VARCHAR2(45)"}, {"name": "IS_SUSPICIOUS", "type": "CHAR"}, {"name": "SUSPICION_REASON", "type": "VARCHAR2(500)"}, {"name": "EXCUSE_FILE", "type": "BLOB"}, {"name": "EXCUSE_FILENAME", "type": "VARCHAR2(255)"}, {"name": "EXCUSE_MIMETYPE", "type": "VARCHAR2(100)"}, {"name": "EXCUSE_TYPE", "type": "VARCHAR2(30)"}, {"name": "EXCUSE_STATUS", "type": "VARCHAR2(20)"}, {"name": "EXCUSE_SUBMITTED_AT", "type": "TIMESTAMP"}, {"name": "EXCUSE_REVIEWED_BY", "type": "VARCHAR2(255)"}, {"name": "EXCUSE_REVIEW_NOTES", "type": "VARCHAR2(500)"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["ATTENDANCE_ID"]}, "RAF_BOOKINGS": {"columns": [{"name": "BOOKING_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "BOOKING_CODE", "type": "VARCHAR2(50)"}, {"name": "CLASSROOM_ID", "type": "NUMBER"}, {"name": "TIME_SLOT_ID", "type": "NUMBER"}, {"name": "BOOKING_DATE", "type": "DATE"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "PURPOSE", "type": "NVARCHAR2(500)"}, {"name": "BOOKING_STATUS", "type": "VARCHAR2(20)"}, {"name": "QR_TOKEN", "type": "VARCHAR2(100)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["BOOKING_ID"]}, "RAF_CLASSROOMS": {"columns": [{"name": "CLASSROOM_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "COLLEGE_ID", "type": "NUMBER"}, {"name": "CLASSROOM_NAME", "type": "NVARCHAR2(100)"}, {"name": "CLASSROOM_CODE", "type": "VARCHAR2(50)"}, {"name": "ROOM_TYPE", "type": "VARCHAR2(20)"}, {"name": "BUILDING_NAME", "type": "NVARCHAR2(100)"}, {"name": "FLOOR_NUMBER", "type": "NUMBER"}, {"name": "CAPACITY", "type": "NUMBER"}, {"name": "EXAM_CAPACITY", "type": "NUMBER"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["CLASSROOM_ID"]}, "RAF_COLLEGES": {"columns": [{"name": "COLLEGE_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "COLLEGE_NAME", "type": "NVARCHAR2(255)"}, {"name": "COLLEGE_CODE", "type": "VARCHAR2(50)"}, {"name": "DEAN_NAME", "type": "NVARCHAR2(255)"}, {"name": "DEAN_ACCOUNT_ID", "type": "NUMBER"}, {"name": "DESCRIPTION", "type": "NVARCHAR2(1000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_REFERENCE", "type": "CHAR"}], "pks": ["COLLEGE_ID"]}, "RAF_CURRICULUM_BATCH_DETAILS": {"columns": [{"name": "DETAIL_ID", "type": "NUMBER"}, {"name": "BATCH_ID", "type": "NUMBER"}, {"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "LEVEL_ORDER", "type": "NUMBER"}, {"name": "SEMESTER_ORDER", "type": "NUMBER"}, {"name": "SUBJECT_TYPE", "type": "VARCHAR2(20)"}, {"name": "STATUS", "type": "VARCHAR2(20)"}, {"name": "ERROR_MESSAGE", "type": "VARCHAR2(4000)"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}], "pks": ["DETAIL_ID"]}, "RAF_CURRICULUM_BATCHES": {"columns": [{"name": "BATCH_ID", "type": "NUMBER"}, {"name": "BATCH_NAME", "type": "VARCHAR2(255)"}, {"name": "SUBJECT_COUNT", "type": "NUMBER"}, {"name": "PROGRAM_COUNT", "type": "NUMBER"}, {"name": "TOTAL_ITEMS", "type": "NUMBER"}, {"name": "SUCCESS_COUNT", "type": "NUMBER"}, {"name": "ERROR_COUNT", "type": "NUMBER"}, {"name": "BATCH_STATUS", "type": "VARCHAR2(20)"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "APPLIED_BY", "type": "VARCHAR2(255)"}, {"name": "APPLIED_TIME", "type": "TIMESTAMP"}, {"name": "NOTES", "type": "CLOB"}], "pks": ["BATCH_ID"]}, "RAF_CURRICULUM_MAP": {"columns": [{"name": "CURRICULUM_ID", "type": "NUMBER"}, {"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "LEVEL_ORDER", "type": "NUMBER"}, {"name": "SEMESTER_ORDER", "type": "NUMBER"}, {"name": "SUBJECT_TYPE", "type": "VARCHAR2(20)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["CURRICULUM_ID"]}, "RAF_DEPARTMENTS": {"columns": [{"name": "DEPT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "COLLEGE_ID", "type": "NUMBER"}, {"name": "DEPT_NAME", "type": "NVARCHAR2(255)"}, {"name": "DEPT_CODE", "type": "VARCHAR2(50)"}, {"name": "HOD_NAME", "type": "NVARCHAR2(255)"}, {"name": "HOD_ACCOUNT_ID", "type": "NUMBER"}, {"name": "DESCRIPTION", "type": "NVARCHAR2(1000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_REFERENCE", "type": "CHAR"}], "pks": ["DEPT_ID"]}, "RAF_EXAMS": {"columns": [{"name": "EXAM_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "GROUP_ID", "type": "NUMBER"}, {"name": "INSTRUCTOR_ID", "type": "NUMBER"}, {"name": "EXAM_TITLE", "type": "NVARCHAR2(255)"}, {"name": "EXAM_TYPE", "type": "VARCHAR2(50)"}, {"name": "EXAM_MODE", "type": "VARCHAR2(20)"}, {"name": "EXAM_DATE", "type": "DATE"}, {"name": "START_TIME", "type": "VARCHAR2(5)"}, {"name": "END_TIME", "type": "VARCHAR2(5)"}, {"name": "DURATION_MINUTES", "type": "NUMBER"}, {"name": "CLASSROOM_ID", "type": "NUMBER"}, {"name": "TOTAL_MARKS", "type": "NUMBER"}, {"name": "PASSING_MARKS", "type": "NUMBER"}, {"name": "EXAM_DESCRIPTION", "type": "CLOB"}, {"name": "EXAM_FILE", "type": "BLOB"}, {"name": "EXAM_FILE_NAME", "type": "VARCHAR2(255)"}, {"name": "IS_PUBLISHED", "type": "CHAR"}, {"name": "NOTES", "type": "VARCHAR2(1000)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "RESULTS_PUBLISHED", "type": "CHAR"}], "pks": ["EXAM_ID"]}, "RAF_GROUPS": {"columns": [{"name": "GROUP_ID", "type": "NUMBER"}, {"name": "GROUP_NAME", "type": "NVARCHAR2(100)"}, {"name": "GROUP_CODE", "type": "VARCHAR2(20)"}, {"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "LEVEL_ID", "type": "NUMBER"}, {"name": "BATCH_YEAR", "type": "VARCHAR2(20)"}, {"name": "ACADEMIC_YEAR", "type": "VARCHAR2(20)"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "GROUP_TYPE", "type": "VARCHAR2(20)"}, {"name": "CAPACITY", "type": "NUMBER"}, {"name": "CURRENT_COUNT", "type": "NUMBER"}, {"name": "SUPERVISOR_ACCOUNT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "SECTION_GENDER", "type": "VARCHAR2(10)"}], "pks": ["GROUP_ID"]}, "RAF_INSTRUCTORS": {"columns": [{"name": "INSTRUCTOR_ID", "type": "NUMBER"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "DEPT_ID", "type": "NUMBER"}, {"name": "INSTRUCTOR_CODE", "type": "VARCHAR2(50)"}, {"name": "ACADEMIC_RANK", "type": "VARCHAR2(50)"}, {"name": "MAX_HOURS_PER_WEEK", "type": "NUMBER"}, {"name": "PREFERRED_DAYS", "type": "VARCHAR2(50)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["INSTRUCTOR_ID"]}, "RAF_INSTRUCTOR_SUBJECTS": {"columns": [{"name": "INSTRUCTOR_SUBJECT_ID", "type": "NUMBER"}, {"name": "INSTRUCTOR_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "PRIORITY", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["INSTRUCTOR_SUBJECT_ID"]}, "RAF_KICKED_SESSIONS": {"columns": [{"name": "SESSION_ID", "type": "NUMBER"}, {"name": "KICKED_AT", "type": "TIMESTAMP"}], "pks": ["SESSION_ID"]}, "RAF_LECTURES": {"columns": [{"name": "LECTURE_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "WEEK_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "GROUP_ID", "type": "NUMBER"}, {"name": "INSTRUCTOR_ID", "type": "NUMBER"}, {"name": "CLASSROOM_ID", "type": "NUMBER"}, {"name": "TIME_SLOT_ID", "type": "NUMBER"}, {"name": "LECTURE_DATE", "type": "DATE"}, {"name": "DELIVERY_MODE", "type": "VARCHAR2(20)"}, {"name": "MEETING_LINK", "type": "VARCHAR2(500)"}, {"name": "LECTURE_TYPE", "type": "VARCHAR2(20)"}, {"name": "LECTURE_TITLE", "type": "NVARCHAR2(255)"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "MATERIAL_FILE", "type": "BLOB"}, {"name": "MATERIAL_FILENAME", "type": "VARCHAR2(255)"}, {"name": "MATERIAL_MIMETYPE", "type": "VARCHAR2(100)"}, {"name": "RECORDING_LINK", "type": "VARCHAR2(500)"}, {"name": "QR_TOKEN", "type": "VARCHAR2(100)"}, {"name": "QR_GENERATED_AT", "type": "TIMESTAMP"}, {"name": "QR_EXPIRY_TIME", "type": "TIMESTAMP"}, {"name": "LECTURE_STATUS", "type": "VARCHAR2(20)"}, {"name": "STATUS_REASON", "type": "NVARCHAR2(255)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["LECTURE_ID"]}, "RAF_LEVELS": {"columns": [{"name": "LEVEL_ID", "type": "NUMBER"}, {"name": "LEVEL_NAME", "type": "NVARCHAR2(100)"}, {"name": "LEVEL_CODE", "type": "VARCHAR2(20)"}, {"name": "LEVEL_ORDER", "type": "NUMBER"}, {"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "DESCRIPTION", "type": "NVARCHAR2(500)"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["LEVEL_ID"]}, "RAF_PROGRAMS": {"columns": [{"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "PROGRAM_NAME", "type": "NVARCHAR2(255)"}, {"name": "PROGRAM_CODE", "type": "VARCHAR2(50)"}, {"name": "DEPT_ID", "type": "NUMBER"}, {"name": "PROGRAM_DEGREE_ID", "type": "NUMBER"}, {"name": "PROGRAM_TYPE_ID", "type": "NUMBER"}, {"name": "STUDY_SHIFT_ID", "type": "NUMBER"}, {"name": "DURATION_YEARS", "type": "NUMBER"}, {"name": "TOTAL_CREDIT_HOURS", "type": "NUMBER"}, {"name": "SEMESTERS_PER_YEAR", "type": "NUMBER"}, {"name": "GRADUATION_PROJECT_REQUIRED", "type": "CHAR"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "NOTES", "type": "VARCHAR2(1000)"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "COLLEGE_ID", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_TEMPLATE", "type": "CHAR"}, {"name": "COPIED_FROM_ID", "type": "NUMBER"}], "pks": ["PROGRAM_ID"]}, "RAF_SEMESTERS": {"columns": [{"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "SEMESTER_NAME", "type": "NVARCHAR2(100)"}, {"name": "SEMESTER_CODE", "type": "VARCHAR2(50)"}, {"name": "ACADEMIC_YEAR", "type": "VARCHAR2(50)"}, {"name": "SEMESTER_ORDER", "type": "NUMBER"}, {"name": "START_DATE", "type": "DATE"}, {"name": "END_DATE", "type": "DATE"}, {"name": "IS_CURRENT", "type": "CHAR"}, {"name": "REGISTRATION_START", "type": "DATE"}, {"name": "REGISTRATION_END", "type": "DATE"}, {"name": "WITHDRAWAL_DEADLINE", "type": "DATE"}, {"name": "EXAMS_START", "type": "DATE"}, {"name": "EXAMS_END", "type": "DATE"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_TEMPLATE", "type": "CHAR"}], "pks": ["SEMESTER_ID"]}, "RAF_STUDENT_ASSIGNMENTS": {"columns": [{"name": "STUDENT_ASSIGN_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "ASSIGN_ID", "type": "NUMBER"}, {"name": "SUBMISSION_STATUS", "type": "VARCHAR2(20)"}, {"name": "SUBMISSION_DATE", "type": "DATE"}, {"name": "SUBMISSION_FILE", "type": "BLOB"}, {"name": "SUBMISSION_FILE_NAME", "type": "VARCHAR2(255)"}, {"name": "SUBMISSION_FILE_TYPE", "type": "VARCHAR2(100)"}, {"name": "SUBMISSION_FILE_SIZE", "type": "NUMBER"}, {"name": "SCORE", "type": "NUMBER"}, {"name": "PENALTY", "type": "NUMBER"}, {"name": "FINAL_SCORE", "type": "NUMBER"}, {"name": "GRADED_BY", "type": "NUMBER"}, {"name": "GRADED_DATE", "type": "DATE"}, {"name": "FEEDBACK", "type": "VARCHAR2(2000)"}, {"name": "IS_LATE", "type": "CHAR"}, {"name": "LATE_DAYS", "type": "NUMBER"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["STUDENT_ASSIGN_ID"]}, "RAF_STUDENT_EXAMS": {"columns": [{"name": "STUDENT_EXAM_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "EXAM_ID", "type": "NUMBER"}, {"name": "ATTENDANCE_STATUS", "type": "VARCHAR2(20)"}, {"name": "MARKS_OBTAINED", "type": "NUMBER"}, {"name": "GRADE_LETTER", "type": "VARCHAR2(2)"}, {"name": "GRADED_BY", "type": "NUMBER"}, {"name": "GRADED_DATE", "type": "DATE"}, {"name": "FEEDBACK", "type": "VARCHAR2(2000)"}, {"name": "NOTES", "type": "VARCHAR2(500)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["STUDENT_EXAM_ID"]}, "RAF_STUDENTS": {"columns": [{"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "ACCOUNT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "PROGRAM_ID", "type": "NUMBER"}, {"name": "STUDENT_CODE", "type": "VARCHAR2(50)"}, {"name": "ENROLLMENT_YEAR", "type": "NUMBER"}, {"name": "CURRENT_LEVEL", "type": "NUMBER"}, {"name": "CURRENT_SEMESTER", "type": "NUMBER"}, {"name": "EXPECTED_GRADUATION_YEAR", "type": "NUMBER"}, {"name": "GROUP_ID", "type": "NUMBER"}, {"name": "STUDY_SHIFT_ID", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["STUDENT_ID"]}, "RAF_STUDENT_STUDY_TRACK": {"columns": [{"name": "TRACK_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "LECTURE_ID", "type": "NUMBER"}, {"name": "SUBJECT_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "IS_COMPLETED", "type": "CHAR"}, {"name": "COMPLETION_DATE", "type": "DATE"}, {"name": "CONFIDENCE_LEVEL", "type": "NUMBER"}, {"name": "STUDENT_NOTES", "type": "VARCHAR2(2000)"}, {"name": "ACTUAL_DURATION", "type": "NUMBER"}, {"name": "REVIEW_COUNT", "type": "NUMBER"}, {"name": "LAST_REVIEW_DATE", "type": "DATE"}, {"name": "AI_NEXT_REVIEW_DATE", "type": "DATE"}, {"name": "AI_FORGETTING_CURVE", "type": "NUMBER"}, {"name": "AI_RECOMMENDED_SCORE", "type": "NUMBER"}, {"name": "AI_PRIORITY", "type": "VARCHAR2(20)"}, {"name": "AI_RECOMMENDATION_MSG", "type": "VARCHAR2(500)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["TRACK_ID"]}, "RAF_STUDENT_SUBJECTS": {"columns": [{"name": "STUDENT_SUBJECT_ID", "type": "NUMBER"}, {"name": "STUDENT_ID", "type": "NUMBER"}, {"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "SEMESTER_ID", "type": "NUMBER"}, {"name": "REGISTRATION_DATE", "type": "DATE"}, {"name": "REGISTRATION_STATUS", "type": "VARCHAR2(20)"}, {"name": "MIDTERM_GRADE", "type": "NUMBER"}, {"name": "FINAL_GRADE", "type": "NUMBER"}, {"name": "TOTAL_GRADE", "type": "NUMBER"}, {"name": "GRADE_LETTER", "type": "VARCHAR2(2)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "UNSTUDIED_LECTURES_COUNT", "type": "NUMBER"}, {"name": "AI_RISK_LEVEL", "type": "VARCHAR2(20)"}, {"name": "AI_NEGLECT_FLAG", "type": "CHAR"}, {"name": "AI_LAST_ANALYSIS", "type": "DATE"}], "pks": ["STUDENT_SUBJECT_ID"]}, "RAF_SUBJECTS_MASTER": {"columns": [{"name": "SUBJECT_MASTER_ID", "type": "NUMBER"}, {"name": "SUBJECT_CODE", "type": "VARCHAR2(50)"}, {"name": "SUBJECT_NAME", "type": "NVARCHAR2(255)"}, {"name": "SUBJECT_NAME_EN", "type": "VARCHAR2(255)"}, {"name": "DEFAULT_CREDIT_HOURS", "type": "NUMBER"}, {"name": "SUBJECT_CATEGORY", "type": "VARCHAR2(50)"}, {"name": "LECTURE_TYPE", "type": "VARCHAR2(20)"}, {"name": "LAB_REQUIRED", "type": "CHAR"}, {"name": "DURATION_HOURS", "type": "NUMBER"}, {"name": "SESSIONS_PER_WEEK", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SUBJECT_MASTER_ID"]}, "RAF_TIME_SLOTS": {"columns": [{"name": "SLOT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "IS_TEMPLATE", "type": "CHAR"}, {"name": "SLOT_NAME", "type": "NVARCHAR2(50)"}, {"name": "SLOT_CODE", "type": "VARCHAR2(20)"}, {"name": "START_TIME", "type": "VARCHAR2(5)"}, {"name": "END_TIME", "type": "VARCHAR2(5)"}, {"name": "DURATION_MINUTES", "type": "NUMBER"}, {"name": "PERIOD_NUMBER", "type": "NUMBER"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}], "pks": ["SLOT_ID"]}, "RAF_UNIVERSITIES": {"columns": [{"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_NAME", "type": "NVARCHAR2(255)"}, {"name": "UNIVERSITY_CODE", "type": "VARCHAR2(50)"}, {"name": "LOGO", "type": "BLOB"}, {"name": "LOGO_FILENAME", "type": "VARCHAR2(255)"}, {"name": "LOGO_MIMETYPE", "type": "VARCHAR2(100)"}, {"name": "WEBSITE", "type": "VARCHAR2(255)"}, {"name": "COUNTRY", "type": "VARCHAR2(100)"}, {"name": "CITY", "type": "VARCHAR2(100)"}, {"name": "DESCRIPTION", "type": "NVARCHAR2(1000)"}, {"name": "CREATED_BY", "type": "VARCHAR2(1020)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(1020)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "DELETED_BY", "type": "VARCHAR2(1020)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "IS_ACTIVE", "type": "CHAR"}], "pks": ["UNIVERSITY_ID"]}, "RAF_UNIVERSITY_SUBJECTS": {"columns": [{"name": "UNIV_SUBJECT_ID", "type": "NUMBER"}, {"name": "UNIVERSITY_ID", "type": "NUMBER"}, {"name": "SUBJECT_MASTER_ID", "type": "NUMBER"}, {"name": "LOCAL_SUBJECT_NAME", "type": "NVARCHAR2(255)"}, {"name": "LOCAL_SUBJECT_CODE", "type": "VARCHAR2(50)"}, {"name": "CREDIT_HOURS", "type": "NUMBER"}, {"name": "LOCAL_DURATION_HOURS", "type": "NUMBER"}, {"name": "LOCAL_SESSIONS_PER_WEEK", "type": "NUMBER"}, {"name": "LOCAL_LECTURE_TYPE", "type": "VARCHAR2(20)"}, {"name": "IS_ACTIVE", "type": "CHAR"}, {"name": "IS_DELETED", "type": "CHAR"}, {"name": "CREATED_BY", "type": "VARCHAR2(255)"}, {"name": "CREATED_TIME", "type": "TIMESTAMP"}, {"name": "UPDATED_BY", "type": "VARCHAR2(255)"}, {"name": "UPDATED_TIME", "type": "TIMESTAMP"}, {"name": "VERSION_NUMBER", "type": "NUMBER"}, {"name": "DELETED_BY", "type": "VARCHAR2(255)"}, {"name": "DELETED_TIME", "type": "TIMESTAMP"}, {"name": "SUBJECT_SCOPE", "type": "VARCHAR2(30)"}, {"name": "COLLEGE_ID", "type": "NUMBER"}, {"name": "DEPT_ID", "type": "NUMBER"}], "pks": ["UNIV_SUBJECT_ID"]}};
@@ -1989,7 +1874,12 @@ const i18n = {
     expImgTitle: "تصدير المخطط كصورة (SVG / PNG)",
     expImgHint: "تنزيل الرسم الحالي كملف SVG متجهي أو PNG بجودة عالية بأبعاد المخطط الكاملة.",
     expDdlTitle: "تصدير سكربت DDL",
-    expDictTitle: "توليد قاموس بيانات من الكود",
+    expDictTitle: "قاموس البيانات (Data Dictionary .xlsx)",
+    expDictHint: "توليد قاموس بيانات Excel (.xlsx) منسق ومفصل يحتوي على كافة الجداول، الحقول، الأنواع، المفاتيح الأساسية والعلاقات للمخطط الحالي مباشرة، أو من ملفات كود خارجية.",
+    expDictDirectBtn: "توليد وتنزيل القاموس من المخطط الحالي مباشرة (.xlsx)",
+    expDictUploadHint: "أو توليد القاموس من ملفات SQL خارجية مرفوعة:",
+    expDictChooseFiles: "اختيار ملفات الكود",
+    expDictFromFilesBtn: "توليد من الملفات (.xlsx)",
     expBackupTitle: "نسخة احتياطية من التطبيق",
     dbMovedHint: "➡️ أدوات استيراد/تصدير الملفات (SQL و قاموس البيانات والنسخ الاحتياطي) أصبحت في صفحات منفصلة من شريط التنقل العلوي: 📥 استيراد / 📤 تصدير.",
     storageRestoreHint: "استعد نسخة SQLite كاملة أو لقطة ترتيب JSON سبق تصديرها.",
@@ -2092,7 +1982,12 @@ const i18n = {
     expImgTitle: "Export diagram image (SVG / PNG)",
     expImgHint: "Download the current drawing as a vector SVG or high-quality PNG at full diagram size.",
     expDdlTitle: "Export DDL script",
-    expDictTitle: "Generate data dictionary from code",
+    expDictTitle: "Data Dictionary (.xlsx)",
+    expDictHint: "Generate a formatted Excel (.xlsx) Data Dictionary with all tables, columns, types, PKs, and relationships directly from the active diagram or external files.",
+    expDictDirectBtn: "Generate & Download Dictionary from current diagram (.xlsx)",
+    expDictUploadHint: "Or generate dictionary from uploaded external SQL files:",
+    expDictChooseFiles: "Choose Code Files",
+    expDictFromFilesBtn: "Generate from Files (.xlsx)",
     expBackupTitle: "Application backup",
     dbMovedHint: "➡️ File import/export tools (SQL, data dictionary and backup) moved to separate pages in the top navigation: 📥 Import / 📤 Export.",
     storageRestoreHint: "Restore a full SQLite backup or a previously exported JSON layout snapshot.",
@@ -2423,7 +2318,6 @@ async function syncWithOracleDB() {
 function toggleLanguage() {
   currentLang = currentLang === 'ar' ? 'en' : 'ar';
   applyLanguage(currentLang);
-  updateUmlLabels();
   scheduleAutoSave();
   showToast(currentLang === 'ar' ? 'تم التبديل إلى العربية' : 'Switched to English');
 }
@@ -2486,7 +2380,17 @@ function mdToHtml(text) {
     var items = m.split('\n').map(function(x) { return x.replace(/^[ \t]*\d+[.][ \t]+/, ''); });
     return '<ol>' + items.map(function(i) { return '<li>' + _inlineMd(i.trim()) + '</li>'; }).join('') + '</ol>';
   });
-  // restore code blocks
+  // Format prose while fenced code is still protected by placeholders.
+  // Formatting restored SQL would insert paragraph/BR tags inside <pre><code>,
+  // losing newlines in textContent and extending -- comments over later DDL.
+  result = result.split(/\n{2,}/).map(function(p) {
+    p = p.trim();
+    if (!p) return '';
+    if (/^\u0000CB\d+\u0000$/.test(p)) return p;
+    if (/^<(h[1-4]|ul|ol|li|table|blockquote|hr|div)/.test(p)) return p;
+    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
+  }).filter(Boolean).join('\n');
+  // Restore code only after all prose formatting is complete.
   result = result.replace(/\u0000CB(\d+)\u0000/g, function(m, idx) {
     var c = codes[parseInt(idx, 10)];
     if (!c) return '';
@@ -2495,17 +2399,12 @@ function mdToHtml(text) {
       '<span class="ai-code-lang">' + _escapeHtml(c.lang) + '</span>' +
       '<span class="ai-code-actions">' +
       '<button class="ai-code-btn ai-copy-btn">' + _escapeHtml((i18n[currentLang] && i18n[currentLang].copyCode) || 'Copy') + '</button>' +
-      (c.isSQL ? '<button class="ai-code-btn ai-use-code-btn">' + _escapeHtml((i18n[currentLang] && i18n[currentLang].useThisCode) || 'Use this code') + '</button>' : '') +
+      (c.isSQL ? '<button class="ai-code-btn ai-use-code-btn">' + _escapeHtml((i18n[currentLang] && i18n[currentLang].useThisCode) || 'Use this code') + '</button>' +
+        '<button class="ai-code-btn ai-dictionary-btn">📗 ' + (currentLang === 'ar' ? 'قاموس البيانات' : 'Data Dictionary') + '</button>' +
+        '<button class="ai-code-btn ai-download-sql-btn">📥 SQL</button>' : '') +
       '</span></div><pre><code>' + _escapeHtml(c.text) + '</code></pre></div>';
   });
   window.__codeBlocks = codes;
-  // paragraphs
-  result = result.split(/\n{2,}/).map(function(p) {
-    p = p.trim();
-    if (!p) return '';
-    if (/^<(h[1-4]|ul|ol|li|table|blockquote|hr|div)/.test(p)) return p;
-    return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
-  }).filter(Boolean).join('\n');
   return result;
 }
 // Delegated handler for code-block buttons inside #aiMessages
@@ -2531,8 +2430,19 @@ function _aiCodeClickHandler(ev) {
       document.body.removeChild(ta);
     }
     var orig = btn.textContent; btn.textContent = (i18n[currentLang] && i18n[currentLang].codeCopied) || '✅ Copied'; setTimeout(function() { btn.textContent = orig; }, 1500);
-  } else if (btn.classList.contains('ai-use-code-btn')) {
-    applyAgentCode(text);
+  } else if (btn.classList.contains('ai-use-code-btn') || btn.classList.contains('ai-dictionary-btn') || btn.classList.contains('ai-download-sql-btn')) {
+    // Collect ALL code blocks within the same assistant message so that when
+    // the model replies with one SQL block per table, the whole script is used.
+    var msgBox = block.closest('.ai-msg');
+    var allText = '';
+    (msgBox ? msgBox.querySelectorAll('.ai-codeblock pre code') : []).forEach(function(el) {
+      var t = el.textContent || '';
+      if (t.trim()) allText += t + '\n\n';
+    });
+    const sql = allText.trim() || text;
+    if (btn.classList.contains('ai-dictionary-btn')) dictionaryFromCode(sql);
+    else if (btn.classList.contains('ai-download-sql-btn')) downloadQuickBlob(new Blob([sql], {type: 'text/sql;charset=utf-8'}), 'assistant.sql');
+    else applyAgentCode(sql);
   }
 }
 
@@ -2580,6 +2490,8 @@ function _captureCurrentInto(w) {
   w.viewMode = globalViewMode; w.zoom = zoom; w.tableWidth = TABLE_WIDTH; w.dialect = window.currentDialect || 'oracle';
 }
 function _applyWorkspaceToGlobal(w) {
+  const exportPreview = document.getElementById('exportPreview');
+  if (exportPreview) { exportPreview.value = ''; exportPreview.style.display = 'none'; }
   tablesData = w.tablesData; fkList = w.fkList;
   allTables = (w.allTables || Object.keys(w.tablesData || {}));
   comTables = w.comTables || allTables.filter(function(t) { return t.indexOf('COM_') === 0; });
@@ -2633,6 +2545,10 @@ function renderWsBar() {
   var isRTL = currentLang === 'ar';
   bar.dir = isRTL ? 'rtl' : 'ltr';
   bar.innerHTML = '';
+
+  var tabsWrap = document.createElement('div');
+  tabsWrap.className = 'ws-tabs-wrapper';
+
   workspaces.forEach(function(w) {
     var tab = document.createElement('div');
     tab.className = 'ws-tab' + (w.id === activeWorkspaceId ? ' active' : '');
@@ -2659,13 +2575,34 @@ function renderWsBar() {
       acts.appendChild(closeBtn);
     }
     tab.appendChild(icon); tab.appendChild(nm); tab.appendChild(chip); tab.appendChild(acts);
-    bar.appendChild(tab);
+    tabsWrap.appendChild(tab);
   });
+
   var addBtn = document.createElement('button');
   addBtn.className = 'ws-add';
   addBtn.textContent = '+ ' + (isRTL ? 'جديد' : 'New');
   addBtn.onclick = function() { toggleNewPageModal(true); };
-  bar.appendChild(addBtn);
+  tabsWrap.appendChild(addBtn);
+
+  bar.appendChild(tabsWrap);
+
+  var quickActions = document.createElement('div');
+  quickActions.className = 'ws-quick-actions';
+  quickActions.innerHTML = 
+    '<button class="btn-tool btn-sm primary" onclick="runQuickAction(\'dictionary\')" title="' + (isRTL ? 'توليد وتنزيل قاموس بيانات Excel للمخطط الحالي مباشرة' : 'Generate and download Excel Data Dictionary directly from current diagram') + '">📗 <span class="hide-mobile">' + (isRTL ? 'قاموس Excel' : 'Dictionary') + '</span></button>' +
+    '<button class="btn-tool btn-sm" onclick="runQuickAction(\'sql\')" title="' + (isRTL ? 'تنزيل سكربت SQL للمخطط الحالي' : 'Download SQL script for current diagram') + '">🗄️ <span class="hide-mobile">SQL</span></button>' +
+    '<button class="btn-tool btn-sm" onclick="runQuickAction(\'svg\')" title="' + (isRTL ? 'تصدير صورة SVG للمخطط الحالي' : 'Export SVG image of current diagram') + '">🖼️ <span class="hide-mobile">SVG</span></button>' +
+    '<select class="select-clean" id="quickActionSelect" aria-label="Quick Actions" onchange="runQuickAction(this.value); this.value=\'\';">' +
+      '<option value="">⚡ ' + (isRTL ? 'المزيد...' : 'More...') + '</option>' +
+      '<option value="preview">👁 ' + (isRTL ? 'معاينة كود SQL' : 'Preview SQL') + '</option>' +
+      '<option value="copy">📋 ' + (isRTL ? 'نسخ كود SQL' : 'Copy SQL') + '</option>' +
+      '<option value="png">🖼 ' + (isRTL ? 'تصدير صورة PNG' : 'Export PNG') + '</option>' +
+      '<option value="state">📦 ' + (isRTL ? 'تصدير لقطة JSON' : 'Export JSON State') + '</option>' +
+      '<option value="save">💾 ' + (isRTL ? 'حفظ ترتيب المخطط' : 'Save Layout') + '</option>' +
+      '<option value="fit">🔍 ' + (isRTL ? 'ملاءمة المخطط للشاشة' : 'Fit View') + '</option>' +
+    '</select>';
+
+  bar.appendChild(quickActions);
 }
 function activateWorkspace(id) {
   if (id === activeWorkspaceId || !workspaces.length) return;
@@ -2947,6 +2884,11 @@ function applyLanguage(lang) {
   relTag('i18n-expImgHint', 'expImgHint');
   relTag('i18n-expDdlTitle', 'expDdlTitle');
   relTag('i18n-expDictTitle', 'expDictTitle');
+  relTag('i18n-expDictHint', 'expDictHint');
+  relTag('i18n-expDictDirectBtn', 'expDictDirectBtn');
+  relTag('i18n-expDictUploadHint', 'expDictUploadHint');
+  relTag('i18n-expDictChooseFiles', 'expDictChooseFiles');
+  relTag('i18n-expDictFromFilesBtn', 'expDictFromFilesBtn');
   relTag('i18n-expBackupTitle', 'expBackupTitle');
   relTag('i18n-dbMovedHint', 'dbMovedHint');
   relTag('i18n-storageRestoreHint', 'storageRestoreHint');
@@ -3230,337 +3172,6 @@ function updateAIBadge() {
   badge.classList.toggle('cloud', !!cloud);
 }
 
-// ==================== UML STUDIO ====================
-let umlOpen = false, umlSections = [], umlType = 'usecase', umlMermaidN = 0;
-let umlAllMode = true, umlChipsSel = new Set(), umlCardData = [], umlCardView = [];
-let umlAutoDetectTimer = null;
-
-const UML_SAMPLE_TEXT = `1. تسجيل الدخول
-يقوم المستخدم بإدخال اسم المستخدم وكلمة المرور، عندها يتحقق النظام من البيانات المخزنة.
-إذا كانت البيانات صحيحة يمنح النظام المستخدم صلاحية الدخول.
-وإلا يعرض النظام رسالة خطأ ويعيد طلب الإدخال.
-بعد الدخول يستطيع المستخدم عرض لوحة التحكم.
-
-2. إدارة التكليفات
-يتيح النظام للدكتور إنشاء تكليف جديد وإسناده إلى الطلاب.
-يمكن للدكتور تعديل التكليف أو إلغاؤه قبل موعد التسليم.
-يقوم الطالب بتسليم التكليف عبر النظام.
-يقوم الدكتور بمراجعة التسليمات وإصدار التقديرات.
-يقوم النظام بإرسال إشعار للطالب عند إصدار التقدير.
-
-3. حجوزات القاعات
-يقوم الطالب بتقديم طلب حجز قاعة دراسية لمجموعة الطلاب.
-يقوم الدكتور بالموافقة على الطلب أو رفضه.
-في حالة الموافقة يقوم النظام بتأكيد الحجز وإشعار جميع الطلاب.
-عند رفض الطلب يتلقى الطالب سبب الرفض ويستطيع إعادة التقديم.`;
-
-function tUml(ar, en) { return currentLang === 'ar' ? ar : en; }
-
-function updateUmlLabels() {
-  const el = id => document.getElementById(id);
-  const set = (id, txt) => { const n = el(id); if (n) n.textContent = txt; };
-  set('umlTitleText', tUml('📊 مولّد مخططات UML', '📊 UML Studio'));
-  set('umlLblInput', tUml('📄 وثيقة المشروع', '📄 Project Documentation'));
-  set('umlLblFile', tUml('ملف', 'File'));
-  set('umlLblSelect', tUml('🧩 الأقسام المكتشفة — اختر بعضها أو اترك الكل', '🧩 Discovered sections — pick some or keep all'));
-  set('umlT-sequence', tUml('تسلسلي', 'Sequence'));
-  set('umlT-activity', tUml('نشاط', 'Activity'));
-  set('umlT-usecase', tUml('حالات استخدام', 'Use Case'));
-  set('umlGenerateBtn', tUml('⚡ توليد المخططات', '⚡ Generate Diagrams'));
-  set('umlHint', tUml('الصق الوثيقة كاملة: تُكتشف الأقسام وتولَّد المخططات تلقائياً. حدّد أي جزء من النص لتوليد مخطط منه مباشرة.', 'Paste the whole document: sections are auto-detected and all diagrams are generated. Select any chunk of the text to diagram that exact part.'));
-}
-
-function toggleUmlPanel() {
-  umlOpen = !umlOpen;
-  document.getElementById('umlPanel').classList.toggle('open', umlOpen);
-}
-document.getElementById('umlFile').addEventListener('change', function (e) {
-  const f = e.target.files && e.target.files[0];
-  if (!f) return;
-  const lower = (f.name || '').toLowerCase();
-  const isBinary = lower.endsWith('.docx') || lower.endsWith('.doc');
-  const done = text => {
-    document.getElementById('umlText').value = text;
-    updateUmlSelection();
-    detectUmlSections();
-  };
-  if (!isBinary) {
-    const r = new FileReader();
-    r.onload = () => done(r.result);
-    r.readAsText(f);
-    return;
-  }
-  setUmlStatus('📤 ' + tUml('جارٍ استخراج النص من الملف...', 'Extracting text from file...'));
-  const fd = new FormData();
-  fd.append('file', f, f.name);
-  fetch('/api/documents/extract', { method: 'POST', body: fd })
-    .then(r => r.json())
-    .then(j => {
-      if (!j.success) throw new Error(j.detail || j.error || 'extract failed');
-      setUmlStatus('✅ ' + j.format + ' | ' + j.chars + ' ' + tUml('حرفاً', 'chars'));
-      done(j.text);
-    })
-    .catch(err => setUmlStatus('❌ ' + err.message));
-});
-
-document.getElementById('umlText').addEventListener('input', () => {
-  clearTimeout(umlAutoDetectTimer);
-  umlAutoDetectTimer = setTimeout(() => {
-    if (document.getElementById('umlText').value.trim()) detectUmlSections();
-  }, 900);
-});
-document.getElementById('umlText').addEventListener('keyup', updateUmlSelection);
-document.getElementById('umlText').addEventListener('mouseup', updateUmlSelection);
-document.getElementById('umlText').addEventListener('select', updateUmlSelection);
-
-function clearUml() {
-  document.getElementById('umlText').value = '';
-  umlSections = []; umlChipsSel = new Set(); umlAllMode = true; umlCardData = [];
-  document.getElementById('umlSecChips').innerHTML = '';
-  document.getElementById('umlOutCards').innerHTML = '';
-  document.getElementById('umlStatus').textContent = '';
-  document.getElementById('umlSelHint').style.display = 'none';
-}
-
-function loadUmlSample() {
-  document.getElementById('umlText').value = UML_SAMPLE_TEXT;
-  detectUmlSections();
-}
-
-function setUmlStatus(t) { document.getElementById('umlStatus').textContent = t || ''; }
-
-function updateUmlSelection() {
-  const ta = document.getElementById('umlText');
-  const s = (ta.value || '').slice(ta.selectionStart, ta.selectionEnd);
-  const hint = document.getElementById('umlSelHint');
-  if (s && s.trim()) {
-    hint.style.display = 'block';
-    hint.textContent = tUml('🎯 ' + s.length + ' حرفاً محدداً — سيُولَّد من هذا الجزء مباشرة.', '🎯 ' + s.length + ' chars selected — generation will use this exact chunk.');
-  } else {
-    hint.style.display = 'none';
-  }
-}
-
-function getTextSelection() {
-  const ta = document.getElementById('umlText');
-  return (ta.value || '').slice(ta.selectionStart, ta.selectionEnd).trim();
-}
-
-async function detectUmlSections() {
-  const txt = document.getElementById('umlText').value.trim();
-  if (!txt) { renderUmlChips_empty(); return; }
-  try {
-    const res = await fetch('/api/diagrams/sections', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ document: txt })
-    });
-    const j = await res.json();
-    if (!j.success) throw new Error(j.detail || j.error || 'analysis failed');
-    umlSections = j.sections || [];
-    renderUmlChips();
-    setUmlStatus('✅ ' + tUml('تم اكتشاف ', 'Found ') + umlSections.length + tUml(' قسماً — اضغط «توليد المخططات».', ' section(s) — press Generate.'));
-  } catch (err) { setUmlStatus('❌ ' + err.message); }
-}
-
-function renderUmlChips_empty() {
-  const box = document.getElementById('umlSecChips');
-  box.innerHTML = '<span class="uml-chip selected" data-all="1">✨ ' + (tUml('الكل', 'All')) + '</span>';
-  umlAllMode = true; umlChipsSel.clear();
-}
-
-function renderUmlChips() {
-  const box = document.getElementById('umlSecChips');
-  box.innerHTML = '';
-  const allChip = document.createElement('span');
-  allChip.className = 'uml-chip' + (umlAllMode ? ' selected' : '');
-  allChip.dataset.all = '1';
-  allChip.textContent = '✨ ' + tUml('الكل', 'All');
-  allChip.addEventListener('click', () => {
-    umlAllMode = true; umlChipsSel.clear(); renderUmlChips();
-  });
-  box.appendChild(allChip);
-  umlSections.forEach(s => {
-    const chip = document.createElement('span');
-    const on = umlChipsSel.has(s.index);
-    chip.className = 'uml-chip' + (on ? ' selected' : '');
-    chip.innerHTML = '';
-    const idx = document.createElement('span'); idx.className = 'chip-idx'; idx.textContent = '#' + s.index + ' ';
-    chip.appendChild(idx);
-    chip.appendChild(document.createTextNode(s.title));
-    chip.title = s.title;
-    chip.addEventListener('click', () => {
-      if (umlAllMode) { umlAllMode = false; umlChipsSel.clear(); }
-      if (umlChipsSel.has(s.index)) umlChipsSel.delete(s.index); else umlChipsSel.add(s.index);
-      if (umlChipsSel.size === 0) { umlAllMode = true; }
-      renderUmlChips();
-    });
-    box.appendChild(chip);
-  });
-}
-
-function pickUmlType(t) {
-  umlType = t;
-  document.querySelectorAll('#umlPanel .uml-btn[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === t));
-}
-
-async function generateUml() {
-  const text = document.getElementById('umlText').value.trim();
-  if (!text) { setUmlStatus('⚠️ ' + tUml('أدخل نص الوثيقة أولاً.', 'Enter documentation text first.')); return; }
-  const sel = getTextSelection();
-  if (sel) {
-    await generateOneUml(text, sel);
-    return;
-  }
-  if (umlAllMode || umlChipsSel.size === 0) {
-    await generateAllUml(text, null);
-  } else {
-    await generateAllUml(text, [...umlChipsSel]);
-  }
-}
-
-function postJson(url, body) {
-  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    .then(r => r.json());
-}
-
-async function generateAllUml(text, secIndices) {
-  setUmlStatus('⚡ ' + tUml('جارٍ توليد المخططات...', 'Generating diagrams...'));
-  try {
-    const body = { document: text, diagram_type: umlType, prefer_llm: false };
-    if (secIndices) body.sections = secIndices;
-    const j = await postJson('/api/diagrams/generate-all', body);
-    if (!j.success) throw new Error(j.detail || j.error || 'generation failed');
-    renderUmlOutCards(j.diagrams);
-    setUmlStatus('✅ ' + j.count + ' ' + tUml('مخطط', 'diagram(s)') + ' — ' + umlType + (j.total_sections !== j.count ? ' / ' + j.total_sections : ''));
-  } catch (err) { setUmlStatus('❌ ' + err.message); }
-}
-
-async function generateOneUml(text, sel) {
-  setUmlStatus('⚡ ' + tUml('جارٍ توليد مخطط من الجزء المحدد...', 'Generating from selection...'));
-  try {
-    const j = await postJson('/api/diagrams/generate', { document: text, selection: sel, diagram_type: umlType, prefer_llm: false });
-    if (!j.success) throw new Error(j.detail || j.error || 'generation failed');
-    renderUmlOutCards([j]);
-    setUmlStatus('✅ ' + tUml('مخطط من الجزء المحدد', 'Diagram from selection') + ' — ' + umlType);
-  } catch (err) { setUmlStatus('❌ ' + err.message); }
-}
-
-function isDarkMode() {
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  const nums = bg.match(/\d+/g);
-  if (!nums || nums.length < 3) return false;
-  return (+nums[0] + +nums[1] + +nums[2]) / 3 < 128;
-}
-
-async function renderMermaidUml(code, box) {
-  box.innerHTML = '';
-  try {
-    if (typeof mermaid === 'undefined' || !mermaid.render) throw new Error('mermaid unavailable');
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', theme: isDarkMode() ? 'dark' : 'default', fontFamily: 'Cairo, sans-serif' });
-    umlMermaidN += 1;
-    const res = await mermaid.render('umlM' + umlMermaidN, code);
-    box.innerHTML = res.svg;
-  } catch (err) {
-    const pre = document.createElement('pre'); pre.textContent = code; box.appendChild(pre);
-    const hint = document.createElement('div'); hint.className = 'uml-hint'; hint.textContent = '⚠️ ' + err.message; box.appendChild(hint);
-  }
-}
-
-function slugify(s) {
-  return String(s || 'diagram').replace(/[^\w\u0600-\u06FF\-]+/g, '_').slice(0, 40);
-}
-
-function renderUmlOutCards(diagrams) {
-  const root = document.getElementById('umlOutCards');
-  root.innerHTML = '';
-  umlCardData = []; umlCardView = [];
-  diagrams.forEach((d, n) => {
-    const card = document.createElement('div');
-    if (!d.success) {
-      card.className = 'uml-err-card';
-      card.textContent = ((d.section && d.section.title) || '—') + ' : ' + (d.error || 'failed');
-      root.appendChild(card);
-      return;
-    }
-    umlCardData.push(d); umlCardView.push('preview');
-    card.className = 'uml-out-card';
-
-    const head = document.createElement('div'); head.className = 'uml-out-card-head';
-    const title = document.createElement('span'); title.className = 'uml-out-card-title';
-    title.textContent = (d.section && d.section.title) || d.title || d.type;
-    const badge = document.createElement('span'); badge.className = 'uml-provider ' + d.provider;
-    badge.textContent = d.provider === 'llm' ? 'LLM' : 'Local';
-    const actions = document.createElement('div'); actions.className = 'uml-out-card-actions';
-    const btn = (label, fn) => { const b = document.createElement('button'); b.className = 'uml-btn'; b.textContent = label; b.addEventListener('click', fn); actions.appendChild(b); return b; };
-    btn('⬇️ .drawio', () => downloadUmlFor(n, 'drawio'));
-    btn('⬇️ .mmd', () => downloadUmlFor(n, 'mmd'));
-    btn('🔗 draw.io', () => openInDiagramsFor(n));
-    head.appendChild(title); head.appendChild(badge); head.appendChild(actions);
-    card.appendChild(head);
-
-    const warn = document.createElement('div'); warn.className = 'uml-warnings';
-    (d.warnings || []).forEach(x => { const w = document.createElement('div'); w.className = 'uml-warning'; w.textContent = x; warn.appendChild(w); });
-    if ((d.warnings || []).length) card.appendChild(warn);
-
-    const tabs = document.createElement('div'); tabs.className = 'uml-out-tabs';
-    [['preview', tUml('👁️ معاينة', '👁️ Preview')], ['mermaid', 'Mermaid'], ['drawio', 'draw.io XML'], ['spec', 'Spec']].forEach(([k, lbl]) => {
-      const t = document.createElement('span');
-      t.className = 'uml-tab' + (umlCardView[n] === k ? ' active' : '');
-      t.textContent = lbl;
-      t.addEventListener('click', () => setCardView(n, k));
-      tabs.appendChild(t);
-    });
-    card.appendChild(tabs);
-
-    const out = document.createElement('div'); out.className = 'uml-out'; out.id = 'umlCardOut' + n;
-    card.appendChild(out);
-    root.appendChild(card);
-    setCardView(n, 'preview');
-  });
-  if (diagrams.length && typeof mermaid !== 'undefined') { /* mermaid renders lazily per card */ }
-}
-
-function setCardView(n, view) {
-  if (!umlCardData[n]) return;
-  umlCardView[n] = view;
-  const card = document.getElementById('umlOutCards').children[n];
-  if (!card) return;
-  card.querySelectorAll('.uml-tab').forEach((t, i) => t.classList.toggle('active', ['preview', 'mermaid', 'drawio', 'spec'][i] === view));
-  const out = document.getElementById('umlCardOut' + n);
-  const d = umlCardData[n];
-  out.innerHTML = '';
-  if (view === 'preview') {
-    const wr = document.createElement('div'); wr.className = 'uml-mermaid-wrap'; out.appendChild(wr);
-    const target = document.createElement('div'); target.className = 'mermaid'; wr.appendChild(target);
-    renderMermaidUml(d.mermaid, target);
-  } else if (view === 'mermaid') {
-    const pre = document.createElement('pre'); pre.className = 'uml-code-strip'; pre.textContent = d.mermaid; out.appendChild(pre);
-  } else if (view === 'drawio') {
-    const pre = document.createElement('pre'); pre.className = 'uml-code-strip'; pre.textContent = d.drawio; out.appendChild(pre);
-  } else {
-    const pre = document.createElement('pre'); pre.className = 'uml-code-strip'; pre.textContent = JSON.stringify(d.spec, null, 2); out.appendChild(pre);
-  }
-}
-
-function downloadUmlFor(n, kind) {
-  const d = umlCardData[n];
-  if (!d) return;
-  const base = slugify(d.section ? d.section.title : d.type);
-  const content = kind === 'drawio' ? d.drawio : d.mermaid;
-  const mime = kind === 'drawio' ? 'application/xml' : 'text/plain;charset=utf-8';
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = base + '_' + d.type + '.' + (kind === 'drawio' ? 'drawio' : 'mmd'); a.click();
-  URL.revokeObjectURL(url);
-}
-
-function openInDiagramsFor(n) {
-  const d = umlCardData[n];
-  if (!d) return;
-  window.open('https://app.diagrams.net/#U' + encodeURIComponent(d.drawio), '_blank');
-}
-
-updateUmlLabels();
 
 function toggleAIPanel() {
   aiOpen = !aiOpen;
@@ -3573,6 +3184,46 @@ function toggleAIPanel() {
     }
   }
 }
+
+// Resizable AI panel: drag the thin handle on the canvas-facing edge.
+(function initAIPanelResize() {
+  const panel = document.getElementById('aiPanel');
+  const handle = document.getElementById('aiResizeHandle');
+  if (!panel || !handle) return;
+  const MIN = 240, MAX = 900;
+  let dragging = false, startX = 0, startW = 0;
+
+  function currentWidth() {
+    const w = getComputedStyle(panel).width;
+    const n = parseFloat(w);
+    return isFinite(n) ? n : 360;
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startW = currentWidth();
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const isLtr = document.body.dir === 'ltr';
+    // RTL: panel on the left, dragging right grows it. LTR: panel on the right, dragging left grows it.
+    const next = Math.min(MAX, Math.max(MIN, startW + (isLtr ? -dx : dx)));
+    panel.style.setProperty('--ai-panel-w', next + 'px');
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
 
 function buildSuggestions() {
   const box = document.getElementById('aiSuggestions');
@@ -5321,11 +4972,84 @@ function dbUpdateSubsystems(subsData) {
   renderLegend();
 }
 
+function currentDiagramSchema() {
+  const tables = {};
+  selectedTables.forEach(name => {
+    if (tablesData[name]) tables[name] = tablesData[name];
+  });
+  const relations = fkList.filter(fk => tables[fk.child] && tables[fk.parent]);
+  return { tablesData: tables, fkList: relations };
+}
+
+function requestCurrentSchemaExport(dialect, drop) {
+  const schema = currentDiagramSchema();
+  return fetch('/api/schema/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...schema, dialect: dialect, include_drop: drop })
+  });
+}
+
+function downloadQuickBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+}
+
+async function downloadDictionary(schema) {
+  if (!Object.keys(schema.tablesData || {}).length) throw new Error('لا توجد جداول / No tables');
+  const res = await fetch('/api/dictionary/from-schema', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(schema)
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || 'Dictionary export failed');
+  }
+  downloadQuickBlob(await res.blob(), 'data_dictionary.xlsx');
+  showToast('✓ Data Dictionary • ' + res.headers.get('X-Tables') + ' tables');
+}
+
+async function dictionaryFromCode(sql) {
+  try {
+    showToast('⏳ Data Dictionary...');
+    const res = await fetch('/api/schema/parse', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({sql})
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.detail || 'SQL parse failed');
+    await downloadDictionary(data.schema);
+  } catch (err) { showToast('❌ ' + err.message); }
+}
+
+async function runQuickAction(action) {
+  try {
+    switch (action) {
+      case 'dictionary': await downloadDictionary(currentDiagramSchema()); break;
+      case 'preview': switchView('export'); await previewExport(); break;
+      case 'sql': await exportSchema(); break;
+      case 'copy': {
+        const res = await requestCurrentSchemaExport(document.getElementById('dbExportDialect').value, document.getElementById('dbExportDrop').checked);
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.detail || 'Export failed');
+        await navigator.clipboard.writeText(data.script);
+        showToast('✓ SQL copied'); break;
+      }
+      case 'svg': exportSVG(); break;
+      case 'png': exportPNG(); break;
+      case 'state': exportStateJson(); break;
+      case 'save': await saveStateToSQLite(); break;
+      case 'fit': switchView('canvas'); fitView(); break;
+    }
+  } catch (err) { showToast('❌ ' + err.message); }
+}
+
 async function exportSchema() {
   const dialect = document.getElementById('dbExportDialect').value;
   const drop = document.getElementById('dbExportDrop').checked;
   try {
-    const res = await fetch(`/api/schema/export?dialect=${encodeURIComponent(dialect)}&include_drop=${drop ? 'true' : 'false'}`);
+    const res = await requestCurrentSchemaExport(dialect, drop);
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Export failed');
     const blob = new Blob([data.script], { type: 'text/sql;charset=utf-8' });
@@ -5342,12 +5066,14 @@ async function exportSchema() {
 }
 
 async function previewExport() {
+  const workspaceId = activeWorkspaceId;
   const dialect = document.getElementById('dbExportDialect').value;
   const drop = document.getElementById('dbExportDrop').checked;
   const pre = document.getElementById('exportPreview');
   try {
-    const res = await fetch(`/api/schema/export?dialect=${encodeURIComponent(dialect)}&include_drop=${drop ? 'true' : 'false'}`);
+    const res = await requestCurrentSchemaExport(dialect, drop);
     const data = await res.json();
+    if (workspaceId !== activeWorkspaceId) return;
     if (!data.success) throw new Error(data.error || 'Export failed');
     pre.value = data.script;
     pre.style.display = 'block';

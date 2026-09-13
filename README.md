@@ -106,11 +106,9 @@ erd_studio_app/
 ├── subsystems.py          # محرك تصنيف وتقسيم الأنظمة الفرعية
 ├── ai_assistant.py        # محرك المساعد الذكي وخدمات الـ Streaming
 ├── ai_classify.py         # التصنيف الذكي للجداول عبر الـ LLM
-├── diagram_specs.py       # مواصفات ومولدات مخططات UML و Draw.io
 ├── static/
 │   ├── index.html         # الواجهة التفاعلية الكاملة للتطبيق
-│   └── vendor/
-│       └── mermaid.min.js # مكتبة رسم المخططات
+│   └── vendor/            # نصوص ومكتبات مساعدة
 ├── data/
 │   └── .gitkeep           # مجلد قاعدة البيانات المحلية (app.db)
 ├── requirements.txt       # قائمة مكتبات واحتياجات بايثون

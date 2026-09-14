@@ -155,6 +155,8 @@ const i18n = {
     btnGenMock: "توليد البيانات التجريبية الذكية",
     btnCopyMock: "نسخ الكود",
     btnDownMock: "تنزيل (.sql)",
+    spotlightBtn: "بحث سريع...",
+    spotlightPlaceholder: "ابحث في الجداول، الحقول، الأنواع، الأنظمة... [Ctrl+K]",
     aiTitle: "المساعد الذكي",
     aiPlaceholder: "اكتب سؤالاً أو أمراً لتعديل المخطط...",
  aiSend: "",
@@ -301,6 +303,8 @@ const i18n = {
     btnGenMock: "Generate Smart Mock Data",
     btnCopyMock: "Copy Script",
     btnDownMock: "Download (.sql)",
+    spotlightBtn: "Search...",
+    spotlightPlaceholder: "Search tables, columns, types, subsystems... [Ctrl+K]",
     aiTitle: "Smart Assistant",
     aiPlaceholder: "Type a command... e.g. switch theme to dark",
  aiSend: "",
@@ -483,6 +487,47 @@ window.addEventListener('DOMContentLoaded', async () => {
   initAIChatInput();
 });
 
+// Auto-flush and beacon save on page reload/navigation
+window.addEventListener('beforeunload', () => {
+  if (workspaces && workspaces.length > 0) {
+    var curWs = workspaces.find(w => w.id === activeWorkspaceId);
+    if (curWs) _captureCurrentInto(curWs);
+    _saveWorkspacesLocal();
+  }
+  try {
+    localStorage.setItem('erd_theme', currentTheme);
+    localStorage.setItem('erd_lang', currentLang);
+    if (activeWorkspaceId !== null) {
+      localStorage.setItem('erd_active_workspace_id', String(activeWorkspaceId));
+    }
+  } catch(e) {}
+  if (navigator.sendBeacon && autoSaveEnabled) {
+    var active = (workspaces || []).find(w => w.id === activeWorkspaceId);
+    if (active && active.source === 'oracle') {
+      const customColsPlain = {};
+      Object.keys(tableCustomHiddenCols || {}).forEach(k => {
+        customColsPlain[k] = Array.from(tableCustomHiddenCols[k]);
+      });
+      const statePayload = {
+        positions: tablePositions,
+        hidden_cols: customColsPlain,
+        visible_tables: Array.from(selectedTables),
+        settings: {
+          current_theme: currentTheme,
+          current_lang: currentLang,
+          global_view_mode: globalViewMode,
+          zoom: zoom.toString(),
+          pan_x: panX.toString(),
+          pan_y: panY.toString(),
+          is_sidebar_collapsed: isSidebarCollapsed ? '1' : '0'
+        }
+      };
+      const blob = new Blob([JSON.stringify(statePayload)], { type: 'application/json' });
+      navigator.sendBeacon('/api/state', blob);
+    }
+  }
+});
+
 // Load DB connection & app-wide settings from SQLite
 async function loadAppSettings() {
   try {
@@ -573,23 +618,43 @@ async function loadStateFromSQLiteOrLocal() {
       // Restore Settings
       if (state.settings) {
         const s = state.settings;
-        if (s.current_theme) {
+        
+        // Theme: prioritize localStorage if user toggled in browser, fallback to SQLite setting
+        const localTheme = localStorage.getItem('erd_theme');
+        if (localTheme && (localTheme === 'light' || localTheme === 'dark')) {
+          currentTheme = localTheme;
+        } else if (s.current_theme) {
           currentTheme = (s.current_theme === 'light') ? 'light' : 'dark';
-          const sel = document.getElementById('themeSelect');
-          if (sel) sel.value = currentTheme;
-          setTheme(currentTheme, false);
         }
-        if (s.current_lang) {
+        const sel = document.getElementById('themeSelect');
+        if (sel) sel.value = currentTheme;
+        const settingsSel = document.getElementById('settingsTheme');
+        if (settingsSel) settingsSel.value = currentTheme;
+        setTheme(currentTheme, false);
+
+        // Lang: prioritize localStorage if user switched in browser
+        const localLang = localStorage.getItem('erd_lang');
+        if (localLang && (localLang === 'ar' || localLang === 'en')) {
+          currentLang = localLang;
+        } else if (s.current_lang) {
           currentLang = s.current_lang;
         }
+        applyLanguage(currentLang);
+
         if (s.global_view_mode) {
           globalViewMode = s.global_view_mode;
           const gmSel = document.getElementById('globalViewModeSelect');
           if (gmSel) gmSel.value = globalViewMode;
         }
-        if (s.zoom) zoom = parseFloat(s.zoom);
-        if (s.pan_x) panX = parseFloat(s.pan_x);
-        if (s.pan_y) panY = parseFloat(s.pan_y);
+        if (s.zoom && !isNaN(parseFloat(s.zoom))) zoom = parseFloat(s.zoom);
+        if (s.pan_x && !isNaN(parseFloat(s.pan_x))) {
+          panX = parseFloat(s.pan_x);
+          window._hasSavedPanZoom = true;
+        }
+        if (s.pan_y && !isNaN(parseFloat(s.pan_y))) {
+          panY = parseFloat(s.pan_y);
+          window._hasSavedPanZoom = true;
+        }
       }
       return;
     }
@@ -912,16 +977,18 @@ function _wsObj(id, cfg) {
     allTables: cfg.allTables || [],
     comTables: cfg.comTables || [],
     rafTables: cfg.rafTables || [],
-    selectedTables: cfg.selectedTables || new Set(),
+    selectedTables: cfg.selectedTables || (selectedTables && selectedTables.size > 0 ? new Set(selectedTables) : new Set()),
     selectedTableNodes: cfg.selectedTableNodes || new Set(),
-    tablePositions: cfg.tablePositions || {},
+    tablePositions: cfg.tablePositions || (tablePositions && Object.keys(tablePositions).length > 0 ? JSON.parse(JSON.stringify(tablePositions)) : {}),
     tableCustomHiddenCols: cfg.tableCustomHiddenCols || {},
     subsystemData: cfg.subsystemData || null,
     subsystemMapping: cfg.subsystemMapping || {},
-    viewMode: cfg.viewMode || 'no-audit',
-    zoom: (cfg.zoom != null) ? cfg.zoom : 0.85,
+    viewMode: cfg.viewMode || globalViewMode || 'no-audit',
+    zoom: (cfg.zoom != null && isFinite(cfg.zoom)) ? cfg.zoom : zoom,
+    panX: (cfg.panX != null && isFinite(cfg.panX)) ? cfg.panX : panX,
+    panY: (cfg.panY != null && isFinite(cfg.panY)) ? cfg.panY : panY,
     tableWidth: cfg.tableWidth || TABLE_WIDTH,
-    dialect: cfg.dialect || 'oracle',
+    dialect: cfg.dialect || window.currentDialect || 'oracle',
   };
 }
 function _captureCurrentInto(w) {
@@ -935,11 +1002,24 @@ function _captureCurrentInto(w) {
     w.tableCustomHiddenCols[k] = (v instanceof Set) ? new Set(v) : new Set(Array.isArray(v) ? v : []);
   });
   w.subsystemData = subsystemData; w.subsystemMapping = subsystemMapping;
-  w.viewMode = globalViewMode; w.zoom = zoom; w.tableWidth = TABLE_WIDTH; w.dialect = window.currentDialect || 'oracle';
+  w.viewMode = globalViewMode; w.zoom = zoom; w.panX = panX; w.panY = panY; w.tableWidth = TABLE_WIDTH; w.dialect = window.currentDialect || 'oracle';
 }
 function _applyWorkspaceToGlobal(w) {
   const exportPreview = document.getElementById('exportPreview');
   if (exportPreview) { exportPreview.value = ''; exportPreview.style.display = 'none'; }
+
+  // If workspace has no tables, but live schema or global tablesData has tables, salvage them!
+  if (!w.tablesData || Object.keys(w.tablesData).length === 0) {
+    if (window._liveSchema && window._liveSchema.tablesData && Object.keys(window._liveSchema.tablesData).length > 0) {
+      w.tablesData = window._liveSchema.tablesData;
+      w.fkList = window._liveSchema.fkList || [];
+      w.allTables = Object.keys(w.tablesData);
+    } else if (tablesData && Object.keys(tablesData).length > 0) {
+      w.tablesData = tablesData;
+      w.fkList = fkList || [];
+      w.allTables = allTables || Object.keys(tablesData);
+    }
+  }
 
   // Oracle workspace always reflects the live database schema
   if (w.source === 'oracle' && window._liveSchema && window._liveSchema.tablesData && Object.keys(window._liveSchema.tablesData).length > 0) {
@@ -955,12 +1035,28 @@ function _applyWorkspaceToGlobal(w) {
   allTables = (w.allTables || Object.keys(tablesData));
   comTables = w.comTables || allTables.filter(function(t) { return t.indexOf('COM_') === 0; });
   rafTables = w.rafTables || allTables.filter(function(t) { return t.indexOf('RAF_') === 0; });
-  selectedTables = (w.selectedTables instanceof Set) ? new Set(w.selectedTables) : new Set(Array.isArray(w.selectedTables) ? w.selectedTables : []);
-  if (selectedTables.size === 0 && allTables.length > 0) {
+
+  // Safeguard selectedTables: never discard existing selectedTables if workspace has empty or default
+  if (w.selectedTables && ((w.selectedTables instanceof Set && w.selectedTables.size > 0) || (Array.isArray(w.selectedTables) && w.selectedTables.length > 0))) {
+    selectedTables = (w.selectedTables instanceof Set) ? new Set(w.selectedTables) : new Set(w.selectedTables);
+  } else if (selectedTables && selectedTables.size > 0) {
+    w.selectedTables = new Set(selectedTables);
+  } else if (allTables.length > 0) {
     selectedTables = new Set(allTables);
+    w.selectedTables = new Set(allTables);
   }
+
   selectedTableNodes = (w.selectedTableNodes instanceof Set) ? new Set(w.selectedTableNodes) : new Set(Array.isArray(w.selectedTableNodes) ? w.selectedTableNodes : []);
-  tablePositions = JSON.parse(JSON.stringify(w.tablePositions || {}));
+
+  // Safeguard tablePositions: never wipe existing loaded positions with an empty object!
+  if (w.tablePositions && Object.keys(w.tablePositions).length > 0) {
+    tablePositions = JSON.parse(JSON.stringify(w.tablePositions));
+  } else if (tablePositions && Object.keys(tablePositions).length > 0) {
+    w.tablePositions = JSON.parse(JSON.stringify(tablePositions));
+  } else {
+    tablePositions = {};
+  }
+
   tableCustomHiddenCols = {};
   Object.keys(w.tableCustomHiddenCols || {}).forEach(function(k) {
     var v = w.tableCustomHiddenCols[k];
@@ -969,7 +1065,9 @@ function _applyWorkspaceToGlobal(w) {
   subsystemData = w.subsystemData; subsystemMapping = w.subsystemMapping || {};
   activeSubsystemFilter = '';
   if (w.viewMode) { globalViewMode = w.viewMode; var el = document.getElementById('globalViewModeSelect'); if (el) el.value = globalViewMode; }
-  if (w.zoom) zoom = w.zoom;
+  if (w.zoom != null && isFinite(w.zoom)) zoom = w.zoom;
+  if (w.panX != null && isFinite(w.panX)) panX = w.panX;
+  if (w.panY != null && isFinite(w.panY)) panY = w.panY;
   if (w.tableWidth) TABLE_WIDTH = w.tableWidth;
   window.currentDialect = w.dialect;
   document.documentElement.setAttribute('data-dialect', w.dialect || 'oracle');
@@ -1087,10 +1185,16 @@ function activateWorkspace(id) {
   var current = workspaces.find(function(w) { return w.id === activeWorkspaceId; });
   if (current) _captureCurrentInto(current);
   activeWorkspaceId = id;
+  try { localStorage.setItem('erd_active_workspace_id', String(id)); } catch(e) {}
   _applyWorkspaceToGlobal(target);
   buildSidebarList(); updateSubsysFilterOptions(); renderLegend(); renderAll();
-  setTimeout(fitView, 60);
+  if (target.panX != null && target.panY != null) {
+    updateCanvasTransform();
+  } else {
+    setTimeout(fitView, 60);
+  }
   renderWsBar();
+  _saveWorkspacesLocal();
   scheduleAutoSave();
 }
 function closeWorkspace(id) {
@@ -1189,7 +1293,11 @@ async function initWorkspaces() {
       tablesData: liveTd,
       fkList: liveFk,
       allTables: liveAll,
-      selectedTables: new Set(liveAll)
+      selectedTables: (selectedTables && selectedTables.size > 0) ? new Set(selectedTables) : new Set(liveAll),
+      tablePositions: (tablePositions && Object.keys(tablePositions).length > 0) ? JSON.parse(JSON.stringify(tablePositions)) : {},
+      zoom: zoom,
+      panX: panX,
+      panY: panY
     });
     workspaces.unshift(oracleWs);
   } else {
@@ -1203,8 +1311,21 @@ async function initWorkspaces() {
       var validSet = new Set(liveAll);
       var prunedSel = new Set();
       (oracleWs.selectedTables || []).forEach(function(t) { if (validSet.has(t)) prunedSel.add(t); });
-      oracleWs.selectedTables = prunedSel.size > 0 ? prunedSel : new Set(liveAll);
+      if (prunedSel.size > 0) {
+        oracleWs.selectedTables = prunedSel;
+      } else if (selectedTables && selectedTables.size > 0) {
+        oracleWs.selectedTables = new Set(selectedTables);
+      } else {
+        oracleWs.selectedTables = new Set(liveAll);
+      }
     }
+    // If oracleWs has no positions or empty positions, but we have positions from SQLite, sync them!
+    if ((!oracleWs.tablePositions || Object.keys(oracleWs.tablePositions).length === 0) && tablePositions && Object.keys(tablePositions).length > 0) {
+      oracleWs.tablePositions = JSON.parse(JSON.stringify(tablePositions));
+    }
+    if (oracleWs.zoom == null) oracleWs.zoom = zoom;
+    if (oracleWs.panX == null) oracleWs.panX = panX;
+    if (oracleWs.panY == null) oracleWs.panY = panY;
   }
 
   // Sanitize all workspaces: purge any legacy demo workspaces with obsolete prefixes
@@ -1227,6 +1348,17 @@ async function initWorkspaces() {
     }
   });
 
+  // Restore saved active workspace ID from localStorage if valid
+  try {
+    var savedWsId = localStorage.getItem('erd_active_workspace_id');
+    if (savedWsId !== null) {
+      var parsedId = parseInt(savedWsId, 10);
+      if (!isNaN(parsedId) && workspaces.some(function(w) { return w.id === parsedId; })) {
+        activeWorkspaceId = parsedId;
+      }
+    }
+  } catch(e) {}
+
   if (activeWorkspaceId === null || !workspaces.some(function(w) { return w.id === activeWorkspaceId; })) {
     activeWorkspaceId = workspaces[0].id;
   }
@@ -1241,11 +1373,19 @@ async function initWorkspaces() {
   }
 
   var activeWs = workspaces.find(function(w) { return w.id === activeWorkspaceId; }) || workspaces[0];
+  if ((!activeWs.tablesData || Object.keys(activeWs.tablesData).length === 0) && oracleWs && oracleWs.tablesData && Object.keys(oracleWs.tablesData).length > 0) {
+    activeWs = oracleWs;
+    activeWorkspaceId = oracleWs.id;
+  }
   _applyWorkspaceToGlobal(activeWs);
   renderWsBar();
   _saveWorkspacesLocal();
   buildSidebarList(); updateSubsysFilterOptions(); renderLegend(); renderAll();
-  setTimeout(fitView, 60);
+  if (window._hasSavedPanZoom || (activeWs && activeWs.panX != null && activeWs.panY != null)) {
+    updateCanvasTransform();
+  } else {
+    setTimeout(fitView, 60);
+  }
 }
 // ---- New page / source modal ----
 function toggleNewPageModal(show) {
@@ -1405,194 +1545,226 @@ window.activateWorkspace = activateWorkspace;
 window.openNewPageFromModal = function(src) { toggleNewPageModal(true); };
 
 function applyLanguage(lang) {
-  try { localStorage.setItem('erd_lang', lang); } catch(e) {}
-  const t = i18n[lang];
-  document.documentElement.lang = lang;
-  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-  document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  try {
+    try { localStorage.setItem('erd_lang', lang); } catch(e) {}
+    const t = (typeof i18n !== 'undefined' && i18n[lang]) || (window.i18n && window.i18n[lang]) || {};
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
 
-  const updateBtnText = (btnId, text) => {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    const labelSpan = btn.querySelector('.btn-label-text');
-    if (labelSpan) {
-      labelSpan.textContent = text;
-    } else {
-      let found = false;
-      for (const node of btn.childNodes) {
-        if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
-          node.nodeValue = ' ' + text;
-          found = true;
-          break;
+    const setText = (id, text) => {
+      const el = document.getElementById(id);
+      if (el && text !== undefined && text !== null) el.textContent = text;
+    };
+    const setHtml = (id, html) => {
+      const el = document.getElementById(id);
+      if (el && html !== undefined && html !== null) el.innerHTML = html;
+    };
+    const updateBtnText = (btnId, text) => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      const labelSpan = btn.querySelector('.btn-label-text');
+      if (labelSpan) {
+        labelSpan.textContent = text;
+      } else {
+        let found = false;
+        for (const node of btn.childNodes) {
+          if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
+            node.nodeValue = ' ' + text;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          btn.title = text;
         }
       }
-      if (!found) {
-        btn.title = text;
-      }
+    };
+
+    // langToggleBtn keeps SVG icon
+    if (document.getElementById('searchInput')) document.getElementById('searchInput').placeholder = t.searchPlaceholder || '';
+    const isAr = (lang === 'ar');
+    const traceLabel = document.getElementById('i18n-traceLineageLabel');
+    if (traceLabel) traceLabel.textContent = isAr ? 'تتبع التبعيات' : 'Trace Lineage';
+    const minimapTitle = document.getElementById('i18n-minimapTitle');
+    if (minimapTitle) minimapTitle.textContent = isAr ? 'خريطة المخطط' : 'Minimap';
+    const clearTracerText = document.getElementById('i18n-clearTracerText');
+    if (clearTracerText) clearTracerText.textContent = isAr ? 'إلغاء التتبع' : 'Clear Trace';
+    const legendsFlyoutTitle = document.getElementById('i18n-legendsFlyoutTitle');
+    if (legendsFlyoutTitle) legendsFlyoutTitle.textContent = isAr ? 'مفاتيح الرموز والأنظمة الفرعية' : 'Legends & Subsystems';
+    const spotlightBtnText = document.getElementById('i18n-spotlightBtn');
+    if (spotlightBtnText) spotlightBtnText.textContent = isAr ? 'بحث سريع في الجداول والحقول...' : 'Quick search tables & columns...';
+    if (typeof updateRoutingModeUI === 'function') updateRoutingModeUI();
+    if (typeof renderSubsystemClusters === 'function') renderSubsystemClusters();
+    if (document.getElementById('i18n-pasteModalTitle') && t.pasteModalTitle) document.getElementById('i18n-pasteModalTitle').textContent = t.pasteModalTitle;
+    if (document.getElementById('i18n-pasteModalSub') && t.pasteModalSub) document.getElementById('i18n-pasteModalSub').textContent = t.pasteModalSub;
+    if (document.getElementById('i18n-pasteInputLabel') && t.pasteInputLabel) document.getElementById('i18n-pasteInputLabel').textContent = t.pasteInputLabel;
+    updateBtnText('i18n-pasteClipboardBtn', t.pasteClipboardBtn);
+    updateBtnText('i18n-pasteCancelBtn', t.pasteCancelBtn);
+    updateBtnText('i18n-pasteSubmitBtn', t.pasteSubmitBtn);
+    if (document.getElementById('i18n-relModalTitle') && t.relModalTitle) {
+      const titleSpan = document.querySelector('#i18n-relModalTitle span');
+      if (titleSpan) titleSpan.textContent = t.relModalTitle;
     }
-  };
+    if (document.getElementById('i18n-relParentTag') && t.relParentTag) document.getElementById('i18n-relParentTag').textContent = t.relParentTag;
+    if (document.getElementById('i18n-relChildTag') && t.relChildTag) document.getElementById('i18n-relChildTag').textContent = t.relChildTag;
+    if (document.getElementById('i18n-propFkName') && t.relPropFkName) document.getElementById('i18n-propFkName').textContent = t.relPropFkName;
+    if (document.getElementById('i18n-propCard') && t.relPropCard) document.getElementById('i18n-propCard').textContent = t.relPropCard;
+    if (document.getElementById('i18n-propNature') && t.relPropNature) document.getElementById('i18n-propNature').textContent = t.relPropNature;
+    if (document.getElementById('i18n-propNull') && t.relPropNull) document.getElementById('i18n-propNull').textContent = t.relPropNull;
+    if (document.getElementById('i18n-relSqlTitle') && t.relSqlTitle) document.getElementById('i18n-relSqlTitle').textContent = t.relSqlTitle;
+    updateBtnText('relCopySqlBtn', t.relCopySqlText);
+    updateBtnText('i18n-relFocusBtn', t.relFocusBtn);
+    updateBtnText('i18n-relAiBtn', t.relAiBtn);
+    updateBtnText('i18n-relCloseBtn', t.relCloseBtn);
+    renderFilterChips();
+    updateSubsysFilterOptions();
+    updateThemeSwitchUI();
+    updateControlIcons();
+    updateSidebarToggleIcon();
 
-  // langToggleBtn keeps SVG icon
-  if (document.getElementById('searchInput')) document.getElementById('searchInput').placeholder = t.searchPlaceholder;
-  if (document.getElementById('i18n-pasteModalTitle') && t.pasteModalTitle) document.getElementById('i18n-pasteModalTitle').textContent = t.pasteModalTitle;
-  if (document.getElementById('i18n-pasteModalSub') && t.pasteModalSub) document.getElementById('i18n-pasteModalSub').textContent = t.pasteModalSub;
-  if (document.getElementById('i18n-pasteInputLabel') && t.pasteInputLabel) document.getElementById('i18n-pasteInputLabel').textContent = t.pasteInputLabel;
-  updateBtnText('i18n-pasteClipboardBtn', t.pasteClipboardBtn);
-  updateBtnText('i18n-pasteCancelBtn', t.pasteCancelBtn);
-  updateBtnText('i18n-pasteSubmitBtn', t.pasteSubmitBtn);
-  if (document.getElementById('i18n-relModalTitle') && t.relModalTitle) {
-    const titleSpan = document.querySelector('#i18n-relModalTitle span');
-    if (titleSpan) titleSpan.textContent = t.relModalTitle;
+    updateBtnText('i18n-exportSvg', t.exportSvg);
+    updateBtnText('i18n-exportPng', t.exportPng);
+    updateBtnText('i18n-saveLayout', t.saveLayout);
+    updateBtnText('i18n-resetLayout', t.resetLayout);
+
+    setText('opt-hierarchical', t.presetHierarchical);
+    setText('opt-grid', t.presetGrid);
+    setText('opt-cluster', t.presetCluster);
+    setText('opt-circular', t.presetCircular);
+    setText('opt-force', t.presetForce);
+    setText('opt-star', t.presetStar);
+
+    setText('opt-dark', t.themeDark);
+    setText('opt-mermaid', t.themeMermaid);
+    setText('opt-academic', t.themeAcademic);
+    setText('opt-light', t.themeLight);
+    updateThemeSwitchUI();
+    updateControlIcons();
+
+    setText('opt-no-audit', t.viewNoAudit);
+    setText('opt-keys-only', t.viewKeysOnly);
+    setText('opt-all-columns', t.viewAllCols);
+
+    updateBtnText('i18n-btnManageCols', t.btnManageCols);
+    updateBtnText('i18n-btnHideAudit', t.btnHideAudit);
+    updateBtnText('i18n-btnKeysOnly', t.btnKeysOnly);
+    updateBtnText('i18n-btnShowAll', t.btnShowAll);
+    updateBtnText('i18n-btnMultiNoAudit', t.btnMultiNoAudit);
+    updateBtnText('i18n-btnMultiKeysOnly', t.btnMultiKeysOnly);
+    updateBtnText('i18n-btnMultiShowAll', t.btnMultiShowAll);
+    updateBtnText('i18n-btnMultiHide', t.btnMultiHide);
+
+    setText('modalTableSubtitle', t.modalSubtitle);
+    if (document.getElementById('modalSearchInput') && t.modalSearch) {
+      document.getElementById('modalSearchInput').placeholder = t.modalSearch;
+    }
+    updateBtnText('i18n-modalDone', t.modalDone);
+    setText('i18n-modalBtnNoAudit', t.modalBtnNoAudit);
+    setText('i18n-modalBtnKeysOnly', t.modalBtnKeysOnly);
+    setText('i18n-modalBtnShowAll', t.modalBtnShowAll);
+
+    setHtml('i18n-hintCtrlDrag', t.hintCtrlDrag);
+    setHtml('i18n-hintDragTable', t.hintDragTable);
+    setHtml('i18n-hintZoom', t.hintZoom);
+
+    const legendTitle = document.getElementById('i18n-legendTitle');
+    if (legendTitle) legendTitle.textContent = t.legendTitle;
+    const relTag = (id, key) => {
+      const node = document.getElementById(id);
+      if (node && t[key]) node.textContent = t[key];
+    };
+    relTag('i18n-relLegendTitle', 'relLegendTitle');
+    relTag('i18n-relLegIdent', 'relLegIdent');
+    relTag('i18n-relLegNonIdent', 'relLegNonIdent');
+    relTag('i18n-relLegCard', 'relLegCard');
+    relTag('i18n-relLegOptional', 'relLegOptional');
+    relTag('i18n-relLegSelf', 'relLegSelf');
+    relTag('i18n-relLegColor', 'relLegColor');
+    relTag('i18n-viewCanvas', 'viewCanvas');
+    relTag('i18n-newPageTitle', 'newPageTitle');
+    relTag('i18n-newPageSub', 'newPageSub');
+    relTag('i18n-viewImport', 'viewImport');
+    relTag('i18n-viewExport', 'viewExport');
+    relTag('i18n-sideTables', 'sideTables');
+    relTag('i18n-importTitle', 'importTitle');
+    relTag('i18n-importSub', 'importSub');
+    relTag('i18n-impSqlTitle', 'impSqlTitle');
+    relTag('i18n-impDictTitle', 'impDictTitle');
+    relTag('i18n-impRestoreTitle', 'impRestoreTitle');
+    relTag('i18n-exportTitle', 'exportTitle');
+    relTag('i18n-exportSub', 'exportSub');
+    relTag('i18n-expImgTitle', 'expImgTitle');
+    relTag('i18n-expImgHint', 'expImgHint');
+    relTag('i18n-expHtmlReportTitle', 'expHtmlReportTitle');
+    relTag('i18n-expHtmlReportHint', 'expHtmlReportHint');
+    relTag('i18n-expHtmlDownloadBtn', 'expHtmlDownloadBtn');
+    relTag('i18n-expHtmlPreviewBtn', 'expHtmlPreviewBtn');
+    relTag('i18n-expPdfReportTitle', 'expPdfReportTitle');
+    relTag('i18n-expPdfReportHint', 'expPdfReportHint');
+    relTag('i18n-expPdfDownloadBtn', 'expPdfDownloadBtn');
+    relTag('i18n-expPdfPrintBtn', 'expPdfPrintBtn');
+    relTag('i18n-expDdlTitle', 'expDdlTitle');
+    relTag('i18n-expDictTitle', 'expDictTitle');
+    relTag('i18n-expDictHint', 'expDictHint');
+    relTag('i18n-expDictDirectBtn', 'expDictDirectBtn');
+    relTag('i18n-expDictUploadHint', 'expDictUploadHint');
+    relTag('i18n-expDictChooseFiles', 'expDictChooseFiles');
+    relTag('i18n-expDictFromFilesBtn', 'expDictFromFilesBtn');
+    relTag('i18n-expBackupTitle', 'expBackupTitle');
+    relTag('i18n-dbMovedHint', 'dbMovedHint');
+    relTag('i18n-storageRestoreHint', 'storageRestoreHint');
+    relTag('i18n-viewAudit', 'viewAudit');
+    relTag('i18n-auditTitle', 'auditTitle');
+    relTag('i18n-auditSub', 'auditSub');
+    relTag('i18n-tabLinter', 'tabLinter');
+    relTag('i18n-tabDiff', 'tabDiff');
+    relTag('i18n-tabMock', 'tabMock');
+    relTag('i18n-btnRunLint', 'btnRunLint');
+    relTag('i18n-btnDownloadRem', 'btnDownloadRem');
+    relTag('i18n-btnRunDiff', 'btnRunDiff');
+    relTag('i18n-btnCopyMig', 'btnCopyMig');
+    relTag('i18n-btnDownMig', 'btnDownMig');
+    relTag('i18n-btnGenMock', 'btnGenMock');
+    relTag('i18n-btnCopyMock', 'btnCopyMock');
+    relTag('i18n-btnDownMock', 'btnDownMock');
+    relTag('i18n-spotlightBtn', 'spotlightBtn');
+    if (document.getElementById('spotlightInput') && t.spotlightPlaceholder) {
+      document.getElementById('spotlightInput').placeholder = t.spotlightPlaceholder;
+    }
+    if (typeof updateUndoRedoUI === 'function') updateUndoRedoUI();
+    const aiTitle = document.getElementById('aiTitleText');
+    if (aiTitle) aiTitle.textContent = t.aiTitle || 'Smart Assistant';
+    const aiInput = document.getElementById('aiInput');
+    if (aiInput) aiInput.placeholder = t.aiPlaceholder || 'Ask AI about your schema...';
+    const aiHint = document.getElementById('aiInputHint');
+    if (aiHint) {
+      aiHint.innerHTML = currentLang === 'ar'
+        ? '<span><kbd>Shift</kbd> + <kbd>Enter</kbd> سطر جديد</span><span class="ai-hint-dot">·</span><span><kbd>Enter</kbd> إرسال</span>'
+        : '<span><kbd>Shift</kbd> + <kbd>Enter</kbd> newline</span><span class="ai-hint-dot">·</span><span><kbd>Enter</kbd> send</span>';
+    }
+    const aiSend = document.getElementById('aiSendBtn');
+    if (aiSend) aiSend.title = (currentLang === 'ar' ? 'إرسال (Enter)' : 'Send (Enter)');
+    const aiClear = document.getElementById('aiClearBtn');
+    if (aiClear) aiClear.title = (currentLang === 'ar' ? 'مسح المحادثة' : 'Clear chat');
+    const langBtn = document.getElementById('langToggleBtn');
+    if (langBtn) langBtn.title = (currentLang === 'ar' ? 'English' : 'العربية');
+    updateSubsysFilterOptions();
+    renderLegend();
+    buildSuggestions();
+    updateAIBadge();
+
+    updateSidebarToggleIcon();
+    buildSidebarList();
+    if (typeof renderWsBar === 'function') renderWsBar();
+    if (typeof toggleNewPageModal === 'function') {
+      var m = document.getElementById('newPageModal');
+      if (m && m.style.display === 'flex') toggleNewPageModal(true);
+    }
+    if (typeof updateStatusBar === 'function') updateStatusBar();
+  } catch(langErr) {
+    console.warn('applyLanguage error caught cleanly:', langErr);
   }
-  if (document.getElementById('i18n-relParentTag') && t.relParentTag) document.getElementById('i18n-relParentTag').textContent = t.relParentTag;
-  if (document.getElementById('i18n-relChildTag') && t.relChildTag) document.getElementById('i18n-relChildTag').textContent = t.relChildTag;
-  if (document.getElementById('i18n-propFkName') && t.relPropFkName) document.getElementById('i18n-propFkName').textContent = t.relPropFkName;
-  if (document.getElementById('i18n-propCard') && t.relPropCard) document.getElementById('i18n-propCard').textContent = t.relPropCard;
-  if (document.getElementById('i18n-propNature') && t.relPropNature) document.getElementById('i18n-propNature').textContent = t.relPropNature;
-  if (document.getElementById('i18n-propNull') && t.relPropNull) document.getElementById('i18n-propNull').textContent = t.relPropNull;
-  if (document.getElementById('i18n-relSqlTitle') && t.relSqlTitle) document.getElementById('i18n-relSqlTitle').textContent = t.relSqlTitle;
-  updateBtnText('relCopySqlBtn', t.relCopySqlText);
-  updateBtnText('i18n-relFocusBtn', t.relFocusBtn);
-  updateBtnText('i18n-relAiBtn', t.relAiBtn);
-  updateBtnText('i18n-relCloseBtn', t.relCloseBtn);
-  renderFilterChips();
-  updateSubsysFilterOptions();
-  updateThemeSwitchUI();
-  updateControlIcons();
-  updateSidebarToggleIcon();
-
-  updateBtnText('i18n-exportSvg', t.exportSvg);
-  updateBtnText('i18n-exportPng', t.exportPng);
-  updateBtnText('i18n-saveLayout', t.saveLayout);
-  updateBtnText('i18n-resetLayout', t.resetLayout);
-
-  document.getElementById('opt-hierarchical').textContent = t.presetHierarchical;
-  document.getElementById('opt-grid').textContent = t.presetGrid;
-  document.getElementById('opt-cluster').textContent = t.presetCluster;
-  document.getElementById('opt-circular').textContent = t.presetCircular;
-  document.getElementById('opt-force').textContent = t.presetForce;
-  if (document.getElementById('opt-star')) document.getElementById('opt-star').textContent = t.presetStar;
-
-  if (document.getElementById('opt-dark')) document.getElementById('opt-dark').textContent = t.themeDark;
-  if (document.getElementById('opt-mermaid')) document.getElementById('opt-mermaid').textContent = t.themeMermaid;
-  if (document.getElementById('opt-academic')) document.getElementById('opt-academic').textContent = t.themeAcademic;
-  if (document.getElementById('opt-light')) document.getElementById('opt-light').textContent = t.themeLight;
-  updateThemeSwitchUI();
-  updateControlIcons();
-
-  document.getElementById('opt-no-audit').textContent = t.viewNoAudit;
-  document.getElementById('opt-keys-only').textContent = t.viewKeysOnly;
-  document.getElementById('opt-all-columns').textContent = t.viewAllCols;
-
-  updateBtnText('i18n-btnManageCols', t.btnManageCols);
-  updateBtnText('i18n-btnHideAudit', t.btnHideAudit);
-  updateBtnText('i18n-btnKeysOnly', t.btnKeysOnly);
-  updateBtnText('i18n-btnShowAll', t.btnShowAll);
-  updateBtnText('i18n-btnMultiNoAudit', t.btnMultiNoAudit);
-  updateBtnText('i18n-btnMultiKeysOnly', t.btnMultiKeysOnly);
-  updateBtnText('i18n-btnMultiShowAll', t.btnMultiShowAll);
-  updateBtnText('i18n-btnMultiHide', t.btnMultiHide);
-
-  document.getElementById('modalTableSubtitle').textContent = t.modalSubtitle;
-  document.getElementById('modalSearchInput').placeholder = t.modalSearch;
-  updateBtnText('i18n-modalDone', t.modalDone);
-  document.getElementById('i18n-modalBtnNoAudit').textContent = t.modalBtnNoAudit;
-  document.getElementById('i18n-modalBtnKeysOnly').textContent = t.modalBtnKeysOnly;
-  document.getElementById('i18n-modalBtnShowAll').textContent = t.modalBtnShowAll;
-
-  document.getElementById('i18n-hintCtrlDrag').innerHTML = t.hintCtrlDrag;
-  document.getElementById('i18n-hintDragTable').innerHTML = t.hintDragTable;
-  document.getElementById('i18n-hintZoom').innerHTML = t.hintZoom;
-
-  const legendTitle = document.getElementById('i18n-legendTitle');
-  if (legendTitle) legendTitle.textContent = t.legendTitle;
-  const relTag = (id, key) => {
-    const node = document.getElementById(id);
-    if (node && t[key]) node.textContent = t[key];
-  };
-  relTag('i18n-relLegendTitle', 'relLegendTitle');
-  relTag('i18n-relLegIdent', 'relLegIdent');
-  relTag('i18n-relLegNonIdent', 'relLegNonIdent');
-  relTag('i18n-relLegCard', 'relLegCard');
-  relTag('i18n-relLegOptional', 'relLegOptional');
-  relTag('i18n-relLegSelf', 'relLegSelf');
-  relTag('i18n-relLegColor', 'relLegColor');
-  relTag('i18n-viewCanvas', 'viewCanvas');
-  relTag('i18n-newPageTitle', 'newPageTitle');
-  relTag('i18n-newPageSub', 'newPageSub');
-  relTag('i18n-viewImport', 'viewImport');
-  relTag('i18n-viewExport', 'viewExport');
-  relTag('i18n-sideTables', 'sideTables');
-  relTag('i18n-importTitle', 'importTitle');
-  relTag('i18n-importSub', 'importSub');
-  relTag('i18n-impSqlTitle', 'impSqlTitle');
-  relTag('i18n-impDictTitle', 'impDictTitle');
-  relTag('i18n-impRestoreTitle', 'impRestoreTitle');
-  relTag('i18n-exportTitle', 'exportTitle');
-  relTag('i18n-exportSub', 'exportSub');
-  relTag('i18n-expImgTitle', 'expImgTitle');
-  relTag('i18n-expImgHint', 'expImgHint');
-  relTag('i18n-expHtmlReportTitle', 'expHtmlReportTitle');
-  relTag('i18n-expHtmlReportHint', 'expHtmlReportHint');
-  relTag('i18n-expHtmlDownloadBtn', 'expHtmlDownloadBtn');
-  relTag('i18n-expHtmlPreviewBtn', 'expHtmlPreviewBtn');
-  relTag('i18n-expPdfReportTitle', 'expPdfReportTitle');
-  relTag('i18n-expPdfReportHint', 'expPdfReportHint');
-  relTag('i18n-expPdfDownloadBtn', 'expPdfDownloadBtn');
-  relTag('i18n-expPdfPrintBtn', 'expPdfPrintBtn');
-  relTag('i18n-expDdlTitle', 'expDdlTitle');
-  relTag('i18n-expDictTitle', 'expDictTitle');
-  relTag('i18n-expDictHint', 'expDictHint');
-  relTag('i18n-expDictDirectBtn', 'expDictDirectBtn');
-  relTag('i18n-expDictUploadHint', 'expDictUploadHint');
-  relTag('i18n-expDictChooseFiles', 'expDictChooseFiles');
-  relTag('i18n-expDictFromFilesBtn', 'expDictFromFilesBtn');
-  relTag('i18n-expBackupTitle', 'expBackupTitle');
-  relTag('i18n-dbMovedHint', 'dbMovedHint');
-  relTag('i18n-storageRestoreHint', 'storageRestoreHint');
-  relTag('i18n-viewAudit', 'viewAudit');
-  relTag('i18n-auditTitle', 'auditTitle');
-  relTag('i18n-auditSub', 'auditSub');
-  relTag('i18n-tabLinter', 'tabLinter');
-  relTag('i18n-tabDiff', 'tabDiff');
-  relTag('i18n-tabMock', 'tabMock');
-  relTag('i18n-btnRunLint', 'btnRunLint');
-  relTag('i18n-btnDownloadRem', 'btnDownloadRem');
-  relTag('i18n-btnRunDiff', 'btnRunDiff');
-  relTag('i18n-btnCopyMig', 'btnCopyMig');
-  relTag('i18n-btnDownMig', 'btnDownMig');
-  relTag('i18n-btnGenMock', 'btnGenMock');
-  relTag('i18n-btnCopyMock', 'btnCopyMock');
-  relTag('i18n-btnDownMock', 'btnDownMock');
-  const aiTitle = document.getElementById('aiTitleText');
-  if (aiTitle) aiTitle.textContent = t.aiTitle || 'Smart Assistant';
-  const aiInput = document.getElementById('aiInput');
-  if (aiInput) aiInput.placeholder = t.aiPlaceholder || 'Ask AI about your schema...';
-  const aiHint = document.getElementById('aiInputHint');
-  if (aiHint) {
-    aiHint.innerHTML = currentLang === 'ar'
-      ? '<span><kbd>Shift</kbd> + <kbd>Enter</kbd> سطر جديد</span><span class="ai-hint-dot">·</span><span><kbd>Enter</kbd> إرسال</span>'
-      : '<span><kbd>Shift</kbd> + <kbd>Enter</kbd> newline</span><span class="ai-hint-dot">·</span><span><kbd>Enter</kbd> send</span>';
-  }
-  const aiSend = document.getElementById('aiSendBtn');
-  if (aiSend) aiSend.title = (currentLang === 'ar' ? 'إرسال (Enter)' : 'Send (Enter)');
-  const aiClear = document.getElementById('aiClearBtn');
-  if (aiClear) aiClear.title = (currentLang === 'ar' ? 'مسح المحادثة' : 'Clear chat');
-  const langBtn = document.getElementById('langToggleBtn');
-  if (langBtn) langBtn.title = (currentLang === 'ar' ? 'English' : 'العربية');
-  updateSubsysFilterOptions();
-  renderLegend();
-  buildSuggestions();
-  updateAIBadge();
-
-  updateSidebarToggleIcon();
-  buildSidebarList();
-  if (typeof renderWsBar === 'function') renderWsBar();
-  if (typeof toggleNewPageModal === 'function') {
-    var m = document.getElementById('newPageModal');
-    if (m && m.style.display === 'flex') toggleNewPageModal(true);
-  }
-  if (typeof updateStatusBar === 'function') updateStatusBar();
 }
 
 // Collapsible Sidebar
@@ -1860,8 +2032,14 @@ function handleSidebarItemClick(tableName, event) {
 }
 
 function updateVisibleStats() {
-  const visibleFks = fkList.filter(f => selectedTables.has(f.child) && selectedTables.has(f.parent)).length;
-  document.getElementById('statSummary').textContent = `${selectedTables.size} Tables · ${visibleFks} FKs`;
+  const isRTL = currentLang === 'ar';
+  const selSet = (selectedTables instanceof Set) ? selectedTables : new Set(selectedTables || []);
+  const visibleFks = (fkList || []).filter(f => selSet.has(f.child) && selSet.has(f.parent)).length;
+  const tCount = selSet.size;
+  const el = document.getElementById('statSummary');
+  if (el) {
+    el.textContent = isRTL ? `${tCount} جداول · ${visibleFks} علاقة` : `${tCount} Tables · ${visibleFks} FKs`;
+  }
   if (typeof updateStatusBar === 'function') updateStatusBar();
 }
 
@@ -3218,10 +3396,14 @@ function calculateInitialLayout(preset = 'hierarchical') {
 
 // Render Both Tables and Dynamic Connecting Arrows
 function renderAll() {
+  if (typeof renderSubsystemClusters === 'function') renderSubsystemClusters();
   renderTables();
   renderRelationships();
   updateCanvasTransform();
-  updateSelectionUI(); if (typeof updateStatusBar === 'function') updateStatusBar();
+  updateSelectionUI();
+  updateVisibleStats();
+  if (typeof updateStatusBar === 'function') updateStatusBar();
+  if (typeof updateMinimap === 'function') updateMinimap();
 }
 
 // Render Tables SVG matching exact Mermaid markup with strict LTR
@@ -3469,14 +3651,21 @@ function renderRelationships() {
 
     let me, ms, midX, midY;
     if (isSelfRef) {
-      const px = parentPos.x + parentPos.width;
-      const py = parentPos.y + Math.min(parentPos.height * 0.4, HEADER_HEIGHT + 10);
-      const loopEnd = parentPos.y + parentPos.height * 0.72;
-      path.setAttribute('d', `M ${px} ${py} C ${px + 64} ${py - 34}, ${px + 64} ${loopEnd + 34}, ${px} ${loopEnd}`);
+      if (relationshipRoutingMode === 'orthogonal') {
+        const ortho = calculateOrthogonalRoute(parentPos, childPos, true, 0);
+        path.setAttribute('d', ortho.d);
+        path.classList.add('orthogonal');
+        midX = ortho.midX; midY = ortho.midY;
+      } else {
+        const px = parentPos.x + parentPos.width;
+        const py = parentPos.y + Math.min(parentPos.height * 0.4, HEADER_HEIGHT + 10);
+        const loopEnd = parentPos.y + parentPos.height * 0.72;
+        path.setAttribute('d', `M ${px} ${py} C ${px + 64} ${py - 34}, ${px + 64} ${loopEnd + 34}, ${px} ${loopEnd}`);
+        midX = px + 42; midY = (py + loopEnd) / 2 + 6;
+      }
       path.setAttribute('stroke-dasharray', '7 4');
       me = 'url(#md-ident-hi)';
       ms = 'url(#md-one-hi)';
-      midX = px + 42; midY = (py + loopEnd) / 2 + 6;
     } else {
       // Spread overlapping connectors between the same table pair
       const pairKey = fk.parent + '||' + fk.child;
@@ -3492,16 +3681,25 @@ function renderRelationships() {
       const dy = (cB.y + cB.height / 2) - (pA.y + pA.height / 2);
       if (Math.abs(dx) >= Math.abs(dy)) { pA.y += perp; cB.y += perp; } else { pA.x += perp; cB.x += perp; }
 
-      const points = calculateConnectorPoints(pA, cB);
-      if (!points) return;
-      path.setAttribute('d', `M ${points.x1} ${points.y1} C ${points.cx1} ${points.cy1}, ${points.cx2} ${points.cy2}, ${points.x2} ${points.y2}`);
+      if (relationshipRoutingMode === 'orthogonal') {
+        const ortho = calculateOrthogonalRoute(pA, cB, false, perp);
+        if (!ortho) return;
+        path.setAttribute('d', ortho.d);
+        path.classList.add('orthogonal');
+        midX = ortho.midX;
+        midY = ortho.midY;
+      } else {
+        const points = calculateConnectorPoints(pA, cB);
+        if (!points) return;
+        path.setAttribute('d', `M ${points.x1} ${points.y1} C ${points.cx1} ${points.cy1}, ${points.cx2} ${points.cy2}, ${points.x2} ${points.y2}`);
+        midX = (points.x1 + points.x2) / 2;
+        midY = (points.y1 + points.y2) / 2;
+      }
       path.setAttribute('stroke-width', isIdentifying ? '2.1' : '1.7');
       if (!isIdentifying) path.setAttribute('stroke-dasharray', '7 4');
 
       me = pathMarker(endKind, color);
       ms = pathMarker(oneMarker, color);
-      midX = (points.x1 + points.x2) / 2;
-      midY = (points.y1 + points.y2) / 2;
     }
 
     path.setAttribute('marker-end', me);
@@ -3582,6 +3780,16 @@ function renderRelationships() {
       }
     });
 
+    if (activeTracerTable) {
+      const isTracedRel = activeTracerRelKeys && activeTracerRelKeys.has(fk.parent + '->' + fk.child);
+      if (isTracedRel) {
+        relG.classList.add('tracer-active');
+        path.classList.add('tracer-active');
+      } else {
+        relG.classList.add('tracer-dimmed');
+        path.classList.add('tracer-dimmed');
+      }
+    }
     layer.appendChild(relG);
   });
 }
@@ -3767,6 +3975,9 @@ function onMouseUp(e) {
       selectedTableNodes.add(draggedNode);
       updateSelectionUI(); if (typeof updateStatusBar === 'function') updateStatusBar();
     } else {
+      if (typeof recordTableDragUndo === 'function') {
+        recordTableDragUndo(groupInitialPositions);
+      }
       // Auto-save dragged positions to SQLite
       scheduleAutoSave();
     }
@@ -3797,14 +4008,24 @@ function layoutRel(relG) {
   const path = relG.querySelector('path');
   if (!path) return;
 
+  const isOrtho = (typeof relationshipRoutingMode !== 'undefined') && (relationshipRoutingMode === 'orthogonal');
+
   let midX, midY;
   if (parent === child) {
-    const px = parentPos.x + parentPos.width;
-    const py = parentPos.y + Math.min(parentPos.height * 0.4, HEADER_HEIGHT + 10);
-    const loopEnd = parentPos.y + parentPos.height * 0.72;
-    path.setAttribute('d', `M ${px} ${py} C ${px + 64} ${py - 34}, ${px + 64} ${loopEnd + 34}, ${px} ${loopEnd}`);
+    if (isOrtho && typeof calculateOrthogonalRoute === 'function') {
+      const ortho = calculateOrthogonalRoute(parentPos, childPos, true, 0);
+      path.setAttribute('d', ortho.d);
+      path.classList.add('orthogonal');
+      midX = ortho.midX; midY = ortho.midY;
+    } else {
+      path.classList.remove('orthogonal');
+      const px = parentPos.x + parentPos.width;
+      const py = parentPos.y + Math.min(parentPos.height * 0.4, HEADER_HEIGHT + 10);
+      const loopEnd = parentPos.y + parentPos.height * 0.72;
+      path.setAttribute('d', `M ${px} ${py} C ${px + 64} ${py - 34}, ${px + 64} ${loopEnd + 34}, ${px} ${loopEnd}`);
+      midX = px + 42; midY = (py + loopEnd) / 2 + 6;
+    }
     path.setAttribute('stroke-dasharray', '7 4');
-    midX = px + 42; midY = (py + loopEnd) / 2 + 6;
   } else {
     const perp = parseFloat(relG.getAttribute('data-perp')) || 0;
     const pA = Object.assign({}, parentPos);
@@ -3813,11 +4034,21 @@ function layoutRel(relG) {
     const dy = (cB.y + cB.height / 2) - (pA.y + pA.height / 2);
     if (Math.abs(dx) >= Math.abs(dy)) { pA.y += perp; cB.y += perp; } else { pA.x += perp; cB.x += perp; }
 
-    const pts = calculateConnectorPoints(pA, cB);
-    if (!pts) return;
-    path.setAttribute('d', `M ${pts.x1} ${pts.y1} C ${pts.cx1} ${pts.cy1}, ${pts.cx2} ${pts.cy2}, ${pts.x2} ${pts.y2}`);
-    midX = (pts.x1 + pts.x2) / 2;
-    midY = (pts.y1 + pts.y2) / 2;
+    if (isOrtho && typeof calculateOrthogonalRoute === 'function') {
+      const ortho = calculateOrthogonalRoute(pA, cB, false, perp);
+      if (!ortho) return;
+      path.setAttribute('d', ortho.d);
+      path.classList.add('orthogonal');
+      midX = ortho.midX;
+      midY = ortho.midY;
+    } else {
+      path.classList.remove('orthogonal');
+      const pts = calculateConnectorPoints(pA, cB);
+      if (!pts) return;
+      path.setAttribute('d', `M ${pts.x1} ${pts.y1} C ${pts.cx1} ${pts.cy1}, ${pts.cx2} ${pts.cy2}, ${pts.x2} ${pts.y2}`);
+      midX = (pts.x1 + pts.x2) / 2;
+      midY = (pts.y1 + pts.y2) / 2;
+    }
   }
 
   const box = relG.querySelector('.rel-label-box');
@@ -4465,30 +4696,36 @@ function setupCanvasEvents() {
   }, { passive: false });
 
   document.getElementById('searchInput').addEventListener('input', buildSidebarList);
+  if (typeof initMinimapEvents === 'function') initMinimapEvents();
 }
 
 // Shortcuts
 function setupKeyboardShortcuts() {
-  window.addEventListener('keydown', (e) => {
+  window.addEventListener('keydown', function(e) {
+    // 1. Spotlight Search: Ctrl + K / Cmd + K
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      toggleAIPanel();
+      openSpotlightSearch();
       return;
     }
+
+    // 2. Escape: closes Spotlight and all open modals
     if (e.key === 'Escape') {
+      if (activeTracerTable) {
+        clearDependencyTrace();
+        return;
+      }
+      toggleLegendsFlyout(false);
+      toggleHintsPopover(false);
+      var spotModal = document.getElementById('spotlightModal');
+      if (spotModal && spotModal.style.display !== 'none') {
+        closeSpotlightSearch();
+        return;
+      }
       if (aiOpen) {
         toggleAIPanel();
         return;
       }
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-      const activeInput = document.activeElement;
-      if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) return;
-      e.preventDefault();
-      selectedTableNodes = new Set(selectedTables);
-      updateSelectionUI(); if (typeof updateStatusBar === 'function') updateStatusBar();
-    }
-    if (e.key === 'Escape') {
       deselectAll();
       closeColumnModal();
       closeSettingsModal();
@@ -4496,8 +4733,37 @@ function setupKeyboardShortcuts() {
       togglePasteSqlModal(false);
       closeRelationshipModal();
     }
+
+    // 3. Undo: Ctrl + Z / Cmd + Z (without Shift)
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      var activeInput = document.activeElement;
+      if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      undoAction();
+      return;
+    }
+
+    // 4. Redo: Ctrl + Y or Ctrl + Shift + Z / Cmd + Shift + Z
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+      var activeInput = document.activeElement;
+      if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      redoAction();
+      return;
+    }
+
+    // 5. Select All on Canvas: Ctrl + A / Cmd + A
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      var activeInput = document.activeElement;
+      if (activeInput && (activeInput.tagName === 'INPUT' || activeInput.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      selectedTableNodes = new Set(selectedTables);
+      updateSelectionUI(); if (typeof updateStatusBar === 'function') updateStatusBar();
+    }
+
+    // 6. Toggle Sidebar: B
     if ((e.key === 'b' || e.key === 'B') && !e.ctrlKey && !e.metaKey) {
-      const activeInput = document.activeElement;
+      var activeInput = document.activeElement;
       if (!activeInput || (activeInput.tagName !== 'INPUT' && activeInput.tagName !== 'TEXTAREA')) {
         toggleSidebar();
       }
@@ -4509,7 +4775,10 @@ function updateCanvasTransform() {
   const layer = document.getElementById('canvasLayer');
   if (layer) {
     layer.setAttribute('transform', `translate(${panX}, ${panY}) scale(${zoom})`);
-  if (typeof updateStatusBar === 'function') updateStatusBar();
+    if (typeof updateStatusBar === 'function') updateStatusBar();
+    if (typeof updateMinimap === 'function') updateMinimap();
+    const dockZoomLabel = document.getElementById('dockZoomLabel');
+    if (dockZoomLabel) dockZoomLabel.textContent = Math.round(zoom * 100) + '%';
   }
 }
 
@@ -4576,12 +4845,27 @@ function focusTables(tableNames) {
 }
 window.focusTables = focusTables;
 
-function applyPresetLayout(preset) {
+function applyPresetLayout(preset, recordUndo) {
+  if (recordUndo === undefined) recordUndo = true;
+  var prevPositions = null;
+  if (recordUndo && typeof pushUndoAction === 'function') {
+    prevPositions = JSON.parse(JSON.stringify(tablePositions || {}));
+  }
   setTimeout(updateControlIcons, 10);
   calculateInitialLayout(preset);
   renderAll();
   scheduleAutoSave();
   setTimeout(fitView, 50);
+  if (recordUndo && prevPositions && typeof pushUndoAction === 'function') {
+    var isRTL = currentLang === 'ar';
+    pushUndoAction({
+      type: 'LAYOUT_PRESET',
+      title: (isRTL ? 'تطبيق ترتيب ' : 'Apply layout: ') + preset,
+      prev: prevPositions,
+      next: JSON.parse(JSON.stringify(tablePositions || {})),
+      preset: preset
+    });
+  }
 }
 
 function syncSpacingInput(type, val) {
@@ -4647,7 +4931,17 @@ function setTheme(theme, save = true) {
 
   updateThemeSwitchUI();
   updateControlIcons();
-  if (save) scheduleAutoSave();
+
+  if (save) {
+    try {
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: { current_theme: currentTheme } })
+      }).catch(() => {});
+    } catch(e) {}
+    scheduleAutoSave();
+  }
 }
 
 function selectGroup(groupKey, val) {
@@ -6700,4 +6994,1113 @@ function downloadMockDataScript() {
   const blob = new Blob([editor.value], { type: 'text/sql;charset=utf-8;' });
   downloadQuickBlob(blob, 'mock_data_' + dialect + '_' + Date.now() + '.sql');
   showToast(currentLang === 'ar' ? '💾 تم تنزيل سكربت البيانات التجريبية' : '💾 Mock data script downloaded');
+}
+
+
+// ============================================================================
+// ⚡ PRODUCTIVITY & UX: SPOTLIGHT SEARCH (Ctrl + K) & UNDO/REDO
+// ============================================================================
+
+// --- UNDO / REDO ENGINE ---
+var undoStack = [];
+var redoStack = [];
+var MAX_UNDO_HISTORY = 50;
+
+function pushUndoAction(action) {
+  if (!action || !action.type) return;
+  undoStack.push(action);
+  if (undoStack.length > MAX_UNDO_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack = []; // Reset redo stack on new user action
+  updateUndoRedoUI();
+}
+
+function updateUndoRedoUI() {
+  var btnUndo = document.getElementById('btnUndo');
+  var btnRedo = document.getElementById('btnRedo');
+  var isRTL = currentLang === 'ar';
+
+  if (btnUndo) {
+    var hasUndo = undoStack.length > 0;
+    btnUndo.disabled = !hasUndo;
+    if (hasUndo) {
+      var last = undoStack[undoStack.length - 1];
+      btnUndo.title = (isRTL ? 'تراجع (Ctrl+Z): ' : 'Undo (Ctrl+Z): ') + (last.title || last.type);
+    } else {
+      btnUndo.title = isRTL ? 'لا يوجد إجراء للتراجع (Ctrl+Z)' : 'Nothing to undo (Ctrl+Z)';
+    }
+  }
+
+  if (btnRedo) {
+    var hasRedo = redoStack.length > 0;
+    btnRedo.disabled = !hasRedo;
+    if (hasRedo) {
+      var next = redoStack[redoStack.length - 1];
+      btnRedo.title = (isRTL ? 'إعادة (Ctrl+Y): ' : 'Redo (Ctrl+Y): ') + (next.title || next.type);
+    } else {
+      btnRedo.title = isRTL ? 'لا يوجد إجراء للإعادة (Ctrl+Y)' : 'Nothing to redo (Ctrl+Y)';
+    }
+  }
+}
+
+function undoAction() {
+  if (undoStack.length === 0) return;
+  var action = undoStack.pop();
+  redoStack.push(action);
+  applyUndoRedoMutation(action, 'undo');
+  updateUndoRedoUI();
+  var isRTL = currentLang === 'ar';
+  showToast((isRTL ? '↩️ تراجع: ' : '↩️ Undone: ') + (action.title || action.type));
+}
+
+function redoAction() {
+  if (redoStack.length === 0) return;
+  var action = redoStack.pop();
+  undoStack.push(action);
+  applyUndoRedoMutation(action, 'redo');
+  updateUndoRedoUI();
+  var isRTL = currentLang === 'ar';
+  showToast((isRTL ? '↪️ إعادة: ' : '↪️ Redone: ') + (action.title || action.type));
+}
+
+function applyUndoRedoMutation(action, direction) {
+  if (!action) return;
+  var isUndo = (direction === 'undo');
+
+  switch (action.type) {
+    case 'MOVE_TABLES': {
+      var targetPos = isUndo ? action.prev : action.next;
+      for (var t in targetPos) {
+        if (tablePositions[t]) {
+          tablePositions[t].x = targetPos[t].x;
+          tablePositions[t].y = targetPos[t].y;
+          var nodeEl = document.getElementById('node-' + t);
+          if (nodeEl) {
+            nodeEl.setAttribute('transform', 'translate(' + tablePositions[t].x + ', ' + tablePositions[t].y + ')');
+          }
+          updateConnectedRelationships(t);
+        }
+      }
+      scheduleAutoSave();
+      break;
+    }
+
+    case 'LAYOUT_PRESET': {
+      var targetPositions = isUndo ? action.prev : action.next;
+      for (var t in targetPositions) {
+        tablePositions[t] = {
+          x: targetPositions[t].x,
+          y: targetPositions[t].y,
+          width: targetPositions[t].width || TABLE_WIDTH,
+          height: targetPositions[t].height || getTableHeight(t)
+        };
+      }
+      renderAll();
+      scheduleAutoSave();
+      setTimeout(fitView, 50);
+      break;
+    }
+
+    case 'COLUMN_MODE': {
+      var target = isUndo ? action.prev : action.next;
+      globalViewMode = target.mode || 'no-audit';
+      tableCustomHiddenCols = JSON.parse(JSON.stringify(target.hidden || {}));
+      var sel = document.getElementById('globalViewModeSelect');
+      if (sel) sel.value = globalViewMode;
+      updateControlIcons();
+      allTables.forEach(function(t) {
+        if (tablePositions[t]) tablePositions[t].height = getTableHeight(t);
+      });
+      renderAll();
+      scheduleAutoSave();
+      break;
+    }
+
+    case 'TABLE_SELECTION': {
+      var targetSet = isUndo ? action.prev : action.next;
+      selectedTables = new Set(targetSet);
+      buildSidebarList();
+      renderAll();
+      scheduleAutoSave();
+      break;
+    }
+
+    case 'SCHEMA_MUTATION': {
+      var targetSchema = isUndo ? action.prev : action.next;
+      if (targetSchema && targetSchema.tablesData) {
+        tablesData = JSON.parse(JSON.stringify(targetSchema.tablesData));
+        fkList = JSON.parse(JSON.stringify(targetSchema.fkList || []));
+        allTables = Object.keys(tablesData);
+        buildSidebarList();
+        renderAll();
+        scheduleAutoSave();
+      }
+      break;
+    }
+  }
+}
+
+function recordTableDragUndo(initPositions) {
+  if (!initPositions || typeof initPositions !== 'object') return;
+  var hasMoved = false;
+  var nextPositions = {};
+  for (var t in initPositions) {
+    if (tablePositions[t]) {
+      var init = initPositions[t];
+      var cur = tablePositions[t];
+      if (Math.abs(init.x - cur.x) > 2 || Math.abs(init.y - cur.y) > 2) {
+        hasMoved = true;
+      }
+      nextPositions[t] = { x: cur.x, y: cur.y };
+    }
+  }
+
+  if (hasMoved) {
+    var count = Object.keys(initPositions).length;
+    var isRTL = currentLang === 'ar';
+    var firstTbl = count === 1 ? Object.keys(initPositions)[0] : '';
+    var title = isRTL
+      ? (count === 1 ? ('تحريك جدول ' + firstTbl) : ('تحريك ' + count + ' جداول'))
+      : (count === 1 ? ('Move table ' + firstTbl) : ('Move ' + count + ' tables'));
+
+    pushUndoAction({
+      type: 'MOVE_TABLES',
+      title: title,
+      prev: JSON.parse(JSON.stringify(initPositions)),
+      next: nextPositions
+    });
+  }
+}
+
+// --- SPOTLIGHT SEARCH ENGINE ---
+var spotlightCategory = 'all';
+var spotlightSelectedIndex = 0;
+var spotlightResults = [];
+
+function openSpotlightSearch() {
+  var modal = document.getElementById('spotlightModal');
+  var input = document.getElementById('spotlightInput');
+  if (!modal || !input) return;
+
+  modal.style.display = 'flex';
+  input.value = '';
+  spotlightCategory = 'all';
+  spotlightSelectedIndex = 0;
+
+  var chips = modal.querySelectorAll('.spotlight-chip');
+  chips.forEach(function(c) {
+    c.classList.toggle('active', c.getAttribute('data-cat') === 'all');
+  });
+
+  performSpotlightSearch('');
+  setTimeout(function() { input.focus(); }, 40);
+}
+
+function closeSpotlightSearch() {
+  var modal = document.getElementById('spotlightModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function closeSpotlightOnBackdrop(e) {
+  if (e.target && e.target.id === 'spotlightModal') {
+    closeSpotlightSearch();
+  }
+}
+
+function setSpotlightCategory(cat, el) {
+  spotlightCategory = cat;
+  if (el) {
+    var parent = el.closest('.spotlight-filters');
+    if (parent) {
+      parent.querySelectorAll('.spotlight-chip').forEach(function(c) { c.classList.remove('active'); });
+      el.classList.add('active');
+    }
+  }
+  var input = document.getElementById('spotlightInput');
+  performSpotlightSearch(input ? input.value : '');
+}
+
+function onSpotlightInput(val) {
+  performSpotlightSearch(val);
+}
+
+function performSpotlightSearch(query) {
+  var q = (query || '').toLowerCase().trim();
+  var results = [];
+  var isRTL = currentLang === 'ar';
+
+  var fkSet = new Set();
+  (fkList || []).forEach(function(f) {
+    if (f.child && f.cols) fkSet.add((f.child + '.' + f.cols).toUpperCase());
+    if (f.child && f.childCol) fkSet.add((f.child + '.' + f.childCol).toUpperCase());
+  });
+
+  var allTbls = Object.keys(tablesData || {});
+
+  allTbls.forEach(function(tname) {
+    var tdata = tablesData[tname] || {};
+    var cols = tdata.columns || [];
+    var subsys = (subsystemData && subsystemData[tname]) ? subsystemData[tname] : (isRTL ? 'عام' : 'General');
+    var pks = new Set((tdata.pks || []).map(function(p) { return String(p).toUpperCase(); }));
+    cols.forEach(function(c) { if (c.pk) pks.add(String(c.name).toUpperCase()); });
+
+    // 1. Table Match
+    if (spotlightCategory === 'all' || spotlightCategory === 'tables') {
+      if (!q || tname.toLowerCase().includes(q)) {
+        results.push({
+          type: 'table',
+          table: tname,
+          title: tname,
+          sub: cols.length + ' ' + (isRTL ? 'حقول' : 'columns') + ' · ' + subsys,
+          subsys: subsys,
+          score: (tname.toLowerCase() === q ? 100 : (tname.toLowerCase().startsWith(q) ? 80 : 50))
+        });
+      }
+    }
+
+    // 2. Column & Data Type Matches
+    cols.forEach(function(c) {
+      var cname = c.name || '';
+      var ctype = c.type || '';
+      var isPk = pks.has(cname.toUpperCase());
+      var isFk = fkSet.has((tname + '.' + cname).toUpperCase());
+
+      // Column name match
+      if (spotlightCategory === 'all' || spotlightCategory === 'columns') {
+        if (q && cname.toLowerCase().includes(q)) {
+          results.push({
+            type: 'column',
+            table: tname,
+            column: cname,
+            colType: ctype,
+            isPk: isPk,
+            isFk: isFk,
+            title: tname + '.' + cname,
+            sub: ctype + (isPk ? ' · 🔑 PK' : '') + (isFk ? ' · 🔗 FK' : '') + ' · ' + subsys,
+            subsys: subsys,
+            score: (cname.toLowerCase() === q ? 95 : (cname.toLowerCase().startsWith(q) ? 75 : 45))
+          });
+        }
+      }
+
+      // Data type match
+      if (spotlightCategory === 'all' || spotlightCategory === 'types') {
+        if (q && ctype.toLowerCase().includes(q)) {
+          results.push({
+            type: 'type',
+            table: tname,
+            column: cname,
+            colType: ctype,
+            title: ctype + ' ➔ ' + tname + '.' + cname,
+            sub: (isRTL ? 'نوع البيانات للحقل ' : 'Data type for column ') + cname + (isRTL ? ' في ' : ' in ') + tname,
+            subsys: subsys,
+            score: 40
+          });
+        }
+      }
+    });
+
+    // 3. Subsystem match
+    if ((spotlightCategory === 'all' || spotlightCategory === 'tables') && q) {
+      if (subsys.toLowerCase().includes(q) && !tname.toLowerCase().includes(q)) {
+        results.push({
+          type: 'subsystem',
+          table: tname,
+          title: subsys + ' ➔ ' + tname,
+          sub: (isRTL ? 'نظام فرعي يضم جدول ' : 'Subsystem containing table ') + tname,
+          subsys: subsys,
+          score: 30
+        });
+      }
+    }
+  });
+
+  results.sort(function(a, b) { return b.score - a.score; });
+  spotlightResults = results.slice(0, 50);
+  spotlightSelectedIndex = 0;
+
+  var countEl = document.getElementById('spotlightMatchCount');
+  if (countEl) {
+    countEl.textContent = isRTL ? (spotlightResults.length + ' نتيجة') : (spotlightResults.length + ' results');
+  }
+
+  renderSpotlightResults(q);
+}
+
+function renderSpotlightResults(query) {
+  var container = document.getElementById('spotlightResultsList');
+  if (!container) return;
+  var isRTL = currentLang === 'ar';
+
+  if (spotlightResults.length === 0) {
+    container.innerHTML = 
+      '<div class="spotlight-empty-state">' +
+        '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.5;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+        '<div>' + (isRTL ? 'لم يتم العثور على جداول أو حقول تطابق بحثك' : 'No tables or columns match your query') + '</div>' +
+      '</div>';
+    return;
+  }
+
+  var badgeLabels = {
+    table: isRTL ? 'جدول' : 'TABLE',
+    column: isRTL ? 'حقل' : 'COLUMN',
+    type: isRTL ? 'نوع' : 'TYPE',
+    subsystem: isRTL ? 'نظام' : 'SUBSYS'
+  };
+
+  var highlightMatch = function(text, q) {
+    if (!q || !text) return text || '';
+    var idx = text.toLowerCase().indexOf(q);
+    if (idx === -1) return text;
+    return text.substring(0, idx) + '<mark>' + text.substring(idx, idx + q.length) + '</mark>' + text.substring(idx + q.length);
+  };
+
+  var html = '';
+  spotlightResults.forEach(function(item, idx) {
+    var isSelected = (idx === spotlightSelectedIndex);
+    var badgeClass = 'badge-' + item.type;
+    var badgeLabel = badgeLabels[item.type] || item.type;
+    var highlightedTitle = highlightMatch(item.title, query);
+
+    html += 
+      '<div class="spotlight-item ' + (isSelected ? 'active-item' : '') + '" data-idx="' + idx + '" onclick="selectSpotlightIndex(' + idx + ')">' +
+        '<span class="spotlight-badge ' + badgeClass + '">' + badgeLabel + '</span>' +
+        '<div class="spotlight-item-main">' +
+          '<div class="spotlight-item-title">' + highlightedTitle + '</div>' +
+          '<div class="spotlight-item-sub">' + item.sub + '</div>' +
+        '</div>' +
+        '<div class="spotlight-item-action"><span style="font-size:11px; opacity:0.6;">↵</span></div>' +
+      '</div>';
+  });
+
+  container.innerHTML = html;
+  scrollActiveSpotlightItemIntoView();
+}
+
+function selectSpotlightIndex(idx) {
+  if (spotlightResults[idx]) {
+    focusSpotlightResult(spotlightResults[idx]);
+  }
+}
+
+function onSpotlightKeydown(e) {
+  if (spotlightResults.length === 0) {
+    if (e.key === 'Escape') closeSpotlightSearch();
+    return;
+  }
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    spotlightSelectedIndex = (spotlightSelectedIndex + 1) % spotlightResults.length;
+    updateSpotlightActiveItemClass();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    spotlightSelectedIndex = (spotlightSelectedIndex - 1 + spotlightResults.length) % spotlightResults.length;
+    updateSpotlightActiveItemClass();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (spotlightResults[spotlightSelectedIndex]) {
+      focusSpotlightResult(spotlightResults[spotlightSelectedIndex]);
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeSpotlightSearch();
+  }
+}
+
+function updateSpotlightActiveItemClass() {
+  var items = document.querySelectorAll('.spotlight-item');
+  items.forEach(function(item, idx) {
+    item.classList.toggle('active-item', idx === spotlightSelectedIndex);
+  });
+  scrollActiveSpotlightItemIntoView();
+}
+
+function scrollActiveSpotlightItemIntoView() {
+  var activeEl = document.querySelector('.spotlight-item.active-item');
+  if (activeEl) {
+    activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function focusSpotlightResult(item) {
+  if (!item || !item.table) return;
+  var isRTL = currentLang === 'ar';
+
+  // 1. Close Spotlight
+  closeSpotlightSearch();
+
+  // 2. Switch to canvas
+  switchView('canvas');
+
+  // 3. Ensure table is visible in selectedTables
+  if (tablesData[item.table] && !selectedTables.has(item.table)) {
+    selectedTables.add(item.table);
+    buildSidebarList();
+    renderAll();
+  }
+
+  // 4. Smooth Pan & Zoom to center table
+  setTimeout(function() {
+    var pos = tablePositions[item.table];
+    if (pos) {
+      panX = (window.innerWidth / 2) - (pos.x + 130) * zoom;
+      panY = (window.innerHeight / 2) - (pos.y + 100) * zoom;
+      updateCanvasTransform();
+    }
+
+    // 5. Trigger glowing spotlight-pulse animation
+    var nodeEl = document.getElementById('node-' + item.table);
+    if (nodeEl) {
+      nodeEl.classList.remove('spotlight-pulse', 'is-highlighted');
+      void nodeEl.offsetWidth; // force browser reflow
+      nodeEl.classList.add('spotlight-pulse', 'is-highlighted');
+      setTimeout(function() {
+        nodeEl.classList.remove('spotlight-pulse', 'is-highlighted');
+      }, 3600);
+
+      // 6. Highlight specific column if searched
+      if (item.column) {
+        var colRows = nodeEl.querySelectorAll('.col-row');
+        colRows.forEach(function(row) {
+          if (row.getAttribute('data-colname') === item.column || row.textContent.includes(item.column)) {
+            row.classList.add('spotlight-col-highlight');
+            setTimeout(function() { row.classList.remove('spotlight-col-highlight'); }, 4000);
+          }
+        });
+      }
+    }
+
+    var toastMsg = isRTL
+      ? ('🎯 تم الانتقال إلى جدول «' + item.table + '»' + (item.column ? (' (حقل: ' + item.column + ')') : ''))
+      : ('🎯 Focused on table \'' + item.table + '\'' + (item.column ? (' (col: ' + item.column + ')') : ''));
+    showToast(toastMsg);
+  }, 80);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CANVAS VISUAL INTELLIGENCE & STUDIO CONTROLS ENGINE
+// 1. Smart Orthogonal / Manhattan Routing (90° bends with obstacle awareness)
+// 2. Interactive Minimap (Bird's Eye View with click-to-pan & viewport drag)
+// 3. Subsystem Container Boxes (Cluster frames with group dragging & undo)
+// 4. FK Dependency Path Tracer (Lineage tree, upstream/downstream dimming)
+// ═══════════════════════════════════════════════════════════════════
+
+let relationshipRoutingMode = localStorage.getItem('erd_routing_mode') || 'orthogonal';
+let showSubsystemClusters = localStorage.getItem('erd_subsystem_clusters') !== 'false';
+let isMinimapVisible = localStorage.getItem('erd_minimap_visible') !== 'false';
+let isMinimapCollapsed = localStorage.getItem('erd_minimap_collapsed') === 'true';
+let activeTracerTable = null;
+let activeTracerRelKeys = new Set();
+let isDraggingMinimapViewport = false;
+let minimapScale = 1;
+let minimapTotalMinX = 0, minimapTotalMinY = 0;
+let minimapOffsetX = 0, minimapOffsetY = 0;
+
+// --- 1. SMART ORTHOGONAL / MANHATTAN ROUTING ---
+function toggleRelationshipRoutingMode() {
+  relationshipRoutingMode = (relationshipRoutingMode === 'orthogonal') ? 'curved' : 'orthogonal';
+  try { localStorage.setItem('erd_routing_mode', relationshipRoutingMode); } catch (e) {}
+  updateRoutingModeUI();
+  renderRelationships();
+  const isAr = (typeof currentLang !== 'undefined' && currentLang === 'ar');
+  const msg = relationshipRoutingMode === 'orthogonal'
+    ? (isAr ? 'تم تفعيل التوجيه المتعامد الذكي (90° Manhattan)' : 'Orthogonal 90° Routing Activated')
+    : (isAr ? 'تم تفعيل التوجيه المنحني (Curved Bezier)' : 'Curved Bezier Routing Activated');
+  if (typeof showToast === 'function') showToast(msg, 'info');
+}
+
+function updateRoutingModeUI() {
+  const iconOrtho = document.getElementById('iconRoutingOrthogonal');
+  const iconCurved = document.getElementById('iconRoutingCurved');
+  const btn = document.getElementById('btnRoutingMode');
+  if (iconOrtho && iconCurved) {
+    iconOrtho.style.display = (relationshipRoutingMode === 'orthogonal') ? 'block' : 'none';
+    iconCurved.style.display = (relationshipRoutingMode === 'orthogonal') ? 'none' : 'block';
+  }
+  if (btn) {
+    btn.classList.toggle('active', relationshipRoutingMode === 'orthogonal');
+    const isAr = (typeof currentLang !== 'undefined' && currentLang === 'ar');
+    btn.title = (relationshipRoutingMode === 'orthogonal')
+      ? (isAr ? 'نمط الخطوط: متعامد 90° (انقر للتبديل للمنحني)' : 'Routing: Orthogonal 90° (Click for Curved)')
+      : (isAr ? 'نمط الخطوط: منحني (انقر للتبديل للمتعامد 90°)' : 'Routing: Curved (Click for Orthogonal 90°)');
+  }
+}
+
+function calculateOrthogonalRoute(boxA, boxB, isSelfRef, perp) {
+  if (isSelfRef) {
+    const px = boxA.x + boxA.width;
+    const py = boxA.y + Math.min(boxA.height * 0.4, 45);
+    const loopEnd = boxA.y + boxA.height * 0.72;
+    const offset = 48;
+    const d = `M ${px} ${py} H ${px + offset} V ${loopEnd} H ${px}`;
+    return { d, midX: px + offset, midY: (py + loopEnd) / 2 };
+  }
+
+  if (!boxA || !boxB) return null;
+  const cA = { x: boxA.x + boxA.width / 2, y: boxA.y + boxA.height / 2 };
+  const cB = { x: boxB.x + boxB.width / 2, y: boxB.y + boxB.height / 2 };
+  const dx = cB.x - cA.x;
+  const dy = cB.y - cA.y;
+
+  let x1, y1, x2, y2;
+  let d = '';
+  let midX = 0, midY = 0;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Horizontal dominant
+    if (dx >= 0) {
+      x1 = boxA.x + boxA.width;
+      y1 = Math.max(boxA.y + 18, Math.min(boxA.y + boxA.height - 18, cA.y + perp));
+      x2 = boxB.x;
+      y2 = Math.max(boxB.y + 18, Math.min(boxB.y + boxB.height - 18, cB.y + perp));
+    } else {
+      x1 = boxA.x;
+      y1 = Math.max(boxA.y + 18, Math.min(boxA.y + boxA.height - 18, cA.y + perp));
+      x2 = boxB.x + boxB.width;
+      y2 = Math.max(boxB.y + 18, Math.min(boxB.y + boxB.height - 18, cB.y + perp));
+    }
+
+    if ((dx >= 0 && x2 > x1 + 24) || (dx < 0 && x2 < x1 - 24)) {
+      const segX = (x1 + x2) / 2;
+      d = `M ${x1} ${y1} H ${segX} V ${y2} H ${x2}`;
+      midX = segX;
+      midY = (y1 + y2) / 2;
+    } else {
+      const padX = (dx >= 0) ? 32 : -32;
+      const detourY = (boxA.y + boxA.height < boxB.y)
+        ? (boxA.y + boxA.height + boxB.y) / 2
+        : (boxB.y + boxB.height < boxA.y)
+          ? (boxB.y + boxB.height + boxA.y) / 2
+          : (y1 + y2) / 2;
+      d = `M ${x1} ${y1} H ${x1 + padX} V ${detourY} H ${x2 - padX} V ${y2} H ${x2}`;
+      midX = (x1 + padX + x2 - padX) / 2;
+      midY = detourY;
+    }
+  } else {
+    // Vertical dominant
+    if (dy >= 0) {
+      x1 = Math.max(boxA.x + 18, Math.min(boxA.x + boxA.width - 18, cA.x + perp));
+      y1 = boxA.y + boxA.height;
+      x2 = Math.max(boxB.x + 18, Math.min(boxB.x + boxB.width - 18, cB.x + perp));
+      y2 = boxB.y;
+    } else {
+      x1 = Math.max(boxA.x + 18, Math.min(boxA.x + boxA.width - 18, cA.x + perp));
+      y1 = boxA.y;
+      x2 = Math.max(boxB.x + 18, Math.min(boxB.x + boxB.width - 18, cB.x + perp));
+      y2 = boxB.y + boxB.height;
+    }
+
+    if ((dy >= 0 && y2 > y1 + 24) || (dy < 0 && y2 < y1 - 24)) {
+      const segY = (y1 + y2) / 2;
+      d = `M ${x1} ${y1} V ${segY} H ${x2} V ${y2}`;
+      midX = (x1 + x2) / 2;
+      midY = segY;
+    } else {
+      const padY = (dy >= 0) ? 32 : -32;
+      const detourX = (boxA.x + boxA.width < boxB.x)
+        ? (boxA.x + boxA.width + boxB.x) / 2
+        : (boxB.x + boxB.width < boxA.x)
+          ? (boxB.x + boxB.width + boxA.x) / 2
+          : (x1 + x2) / 2;
+      d = `M ${x1} ${y1} V ${y1 + padY} H ${detourX} V ${y2 - padY} H ${x2} V ${y2}`;
+      midX = detourX;
+      midY = (y1 + padY + y2 - padY) / 2;
+    }
+  }
+
+  return { d, midX, midY };
+}
+
+// --- 2. INTERACTIVE MINIMAP (BIRD'S EYE VIEW) ---
+function toggleMinimap(force) {
+  if (typeof force === 'boolean') isMinimapVisible = force;
+  else isMinimapVisible = !isMinimapVisible;
+  try { localStorage.setItem('erd_minimap_visible', String(isMinimapVisible)); } catch (e) {}
+
+  const card = document.getElementById('minimapCard');
+  const btn = document.getElementById('btnMinimapDock');
+  if (card) card.style.display = isMinimapVisible ? 'flex' : 'none';
+  if (btn) btn.classList.toggle('active', isMinimapVisible);
+  if (isMinimapVisible) updateMinimap();
+}
+
+function toggleMinimapCollapse() {
+  const card = document.getElementById('minimapCard');
+  if (!card) return;
+  card.classList.toggle('collapsed');
+  isMinimapCollapsed = card.classList.contains('collapsed');
+  try { localStorage.setItem('erd_minimap_collapsed', String(isMinimapCollapsed)); } catch (e) {}
+  if (!isMinimapCollapsed) updateMinimap();
+}
+
+function updateMinimap() {
+  const card = document.getElementById('minimapCard');
+  if (!card || card.style.display === 'none' || card.classList.contains('collapsed')) return;
+
+  const body = document.getElementById('minimapBody');
+  const nodesLayer = document.getElementById('minimapNodesLayer');
+  const viewportRect = document.getElementById('minimapViewport');
+  const wrap = document.getElementById('canvasWrap');
+  if (!body || !nodesLayer || !viewportRect || !wrap) return;
+
+  if (!body._hasMinimapEvents && typeof initMinimapEvents === 'function') {
+    initMinimapEvents();
+  }
+
+  const mmW = body.clientWidth || 218;
+  const mmH = body.clientHeight || 122;
+
+  const visTables = Array.from(selectedTables).filter(t => tablePositions[t]);
+  if (visTables.length === 0) {
+    nodesLayer.innerHTML = '';
+    return;
+  }
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  visTables.forEach(t => {
+    const p = tablePositions[t];
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x + p.width > maxX) maxX = p.x + p.width;
+    if (p.y + p.height > maxY) maxY = p.y + p.height;
+  });
+
+  const vpW = wrap.clientWidth / zoom;
+  const vpH = wrap.clientHeight / zoom;
+  const vpX = -panX / zoom;
+  const vpY = -panY / zoom;
+
+  const margin = 160;
+  const totalMinX = Math.min(minX - margin, vpX);
+  const totalMinY = Math.min(minY - margin, vpY);
+  const totalMaxX = Math.max(maxX + margin, vpX + vpW);
+  const totalMaxY = Math.max(maxY + margin, vpY + vpH);
+
+  const worldW = Math.max(400, totalMaxX - totalMinX);
+  const worldH = Math.max(300, totalMaxY - totalMinY);
+
+  const scale = Math.min(mmW / worldW, mmH / worldH);
+  const offsetX = (mmW - worldW * scale) / 2;
+  const offsetY = (mmH - worldH * scale) / 2;
+
+  minimapScale = scale;
+  minimapTotalMinX = totalMinX;
+  minimapTotalMinY = totalMinY;
+  minimapOffsetX = offsetX;
+  minimapOffsetY = offsetY;
+
+  // Render Mini Table Rectangles
+  let nodesHtml = '';
+  visTables.forEach(t => {
+    const p = tablePositions[t];
+    const nx = offsetX + (p.x - totalMinX) * scale;
+    const ny = offsetY + (p.y - totalMinY) * scale;
+    const nw = Math.max(3, p.width * scale);
+    const nh = Math.max(2.5, p.height * scale);
+    const col = (typeof subsystemColorOf === 'function') ? subsystemColorOf(t) : '#38bdf8';
+    const isRoot = (activeTracerTable && activeTracerTable === t);
+    const fillCol = isRoot ? '#f59e0b' : col;
+    nodesHtml += `<rect class="mm-node" x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" width="${nw.toFixed(1)}" height="${nh.toFixed(1)}" rx="1" fill="${fillCol}" opacity="0.85"/>`;
+  });
+  nodesLayer.innerHTML = nodesHtml;
+
+  // Position Viewport Box
+  const vRx = offsetX + (vpX - totalMinX) * scale;
+  const vRy = offsetY + (vpY - totalMinY) * scale;
+  const vRw = vpW * scale;
+  const vRh = vpH * scale;
+
+  viewportRect.setAttribute('x', Math.max(0, Math.min(mmW - 10, vRx)).toFixed(1));
+  viewportRect.setAttribute('y', Math.max(0, Math.min(mmH - 10, vRy)).toFixed(1));
+  viewportRect.setAttribute('width', Math.max(8, Math.min(mmW, vRw)).toFixed(1));
+  viewportRect.setAttribute('height', Math.max(6, Math.min(mmH, vRh)).toFixed(1));
+
+  // Sync dock zoom percentage label
+  const dockZoomLabel = document.getElementById('dockZoomLabel');
+  if (dockZoomLabel) dockZoomLabel.textContent = Math.round(zoom * 100) + '%';
+}
+
+function initMinimapEvents() {
+  const body = document.getElementById('minimapBody');
+  const vpRect = document.getElementById('minimapViewport');
+  const wrap = document.getElementById('canvasWrap');
+  if (!body || !vpRect || !wrap) return;
+  if (body._hasMinimapEvents) return;
+  body._hasMinimapEvents = true;
+
+  function doMinimapPan(moveEv, startClientX, startClientY, initPanX, initPanY) {
+    if (minimapScale <= 0) return;
+    const dMx = moveEv.clientX - startClientX;
+    const dMy = moveEv.clientY - startClientY;
+    const dWx = dMx / minimapScale;
+    const dWy = dMy / minimapScale;
+
+    panX = initPanX - dWx * zoom;
+    panY = initPanY - dWy * zoom;
+    updateCanvasTransform();
+    updateMinimap();
+  }
+
+  // 1. Drag Viewport rectangle to live-pan canvas
+  vpRect.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    isDraggingMinimapViewport = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPanX = panX;
+    const startPanY = panY;
+
+    function onMouseMove(moveEv) {
+      if (!isDraggingMinimapViewport) return;
+      doMinimapPan(moveEv, startX, startY, startPanX, startPanY);
+    }
+
+    function onMouseUp() {
+      isDraggingMinimapViewport = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+
+  // 2. Click or Drag anywhere on minimap body to jump/center canvas and live-pan
+  body.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return;
+    if (e.target === vpRect) return; // handled by viewport drag
+    e.stopPropagation();
+    e.preventDefault();
+
+    const rect = body.getBoundingClientRect();
+    const clickMx = e.clientX - rect.left;
+    const clickMy = e.clientY - rect.top;
+
+    if (minimapScale <= 0) return;
+    const targetWx = minimapTotalMinX + (clickMx - minimapOffsetX) / minimapScale;
+    const targetWy = minimapTotalMinY + (clickMy - minimapOffsetY) / minimapScale;
+
+    panX = (wrap.clientWidth / 2) - targetWx * zoom;
+    panY = (wrap.clientHeight / 2) - targetWy * zoom;
+    updateCanvasTransform();
+    updateMinimap();
+
+    // Allow continuous dragging from this new position
+    isDraggingMinimapViewport = true;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPanX = panX;
+    const startPanY = panY;
+
+    function onMouseMove(moveEv) {
+      if (!isDraggingMinimapViewport) return;
+      doMinimapPan(moveEv, startX, startY, startPanX, startPanY);
+    }
+
+    function onMouseUp() {
+      isDraggingMinimapViewport = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  });
+}
+
+// --- 3. SUBSYSTEM CONTAINER BOXES (CLUSTERS) ---
+function toggleSubsystemClusters() {
+  showSubsystemClusters = !showSubsystemClusters;
+  try { localStorage.setItem('erd_subsystem_clusters', String(showSubsystemClusters)); } catch (e) {}
+  const btn = document.getElementById('btnSubsystemClusters');
+  if (btn) btn.classList.toggle('active', showSubsystemClusters);
+  renderSubsystemClusters();
+  const isAr = (typeof currentLang !== 'undefined' && currentLang === 'ar');
+  const msg = showSubsystemClusters
+    ? (isAr ? 'تم إظهار إطارات الأنظمة الفرعية' : 'Subsystem Container Boxes Visible')
+    : (isAr ? 'تم إخفاء إطارات الأنظمة الفرعية' : 'Subsystem Container Boxes Hidden');
+  if (typeof showToast === 'function') showToast(msg, 'info');
+}
+
+function renderSubsystemClusters() {
+  const layer = document.getElementById('subsystemClustersLayer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  if (!showSubsystemClusters) return;
+
+  const visTables = Array.from(selectedTables).filter(t => tablePositions[t]);
+  if (visTables.length === 0) return;
+
+  const groups = {};
+  visTables.forEach(t => {
+    const sub = (typeof tableSubsystem === 'function') ? tableSubsystem(t) : 'general';
+    if (!groups[sub]) groups[sub] = [];
+    groups[sub].push(t);
+  });
+
+  const subsList = (subsystemData && subsystemData.subsystems) ? subsystemData.subsystems : [];
+
+  Object.keys(groups).forEach(subKey => {
+    const members = groups[subKey];
+    if (members.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    members.forEach(t => {
+      const p = tablePositions[t];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + p.width > maxX) maxX = p.x + p.width;
+      if (p.y + p.height > maxY) maxY = p.y + p.height;
+    });
+
+    const pad = 24;
+    const headerH = 28;
+    const boxX = minX - pad;
+    const boxY = minY - (pad + headerH);
+    const boxW = (maxX - minX) + pad * 2;
+    const boxH = (maxY - minY) + pad * 2 + headerH;
+
+    const subInfo = subsList.find(s => s.id === subKey);
+    const color = (typeof SUBSYS_COLORS !== 'undefined' && SUBSYS_COLORS[subKey]) ? SUBSYS_COLORS[subKey] : '#38bdf8';
+    const isAr = (typeof currentLang !== 'undefined' && currentLang === 'ar');
+    const title = subInfo ? (isAr ? subInfo.name_ar : subInfo.name_en) : subKey.toUpperCase();
+    const countLabel = isAr ? `${members.length} جداول` : `${members.length} tables`;
+
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'subsystem-cluster');
+    g.setAttribute('data-subsystem', subKey);
+
+    // Boundary Frame Box
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('class', 'subsystem-cluster-box');
+    rect.setAttribute('x', boxX);
+    rect.setAttribute('y', boxY);
+    rect.setAttribute('width', boxW);
+    rect.setAttribute('height', boxH);
+    rect.setAttribute('fill', color);
+    rect.setAttribute('fill-opacity', '0.05');
+    rect.setAttribute('stroke', color);
+    rect.setAttribute('stroke-opacity', '0.35');
+    g.appendChild(rect);
+
+    // Draggable Header Pill
+    const headerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    headerG.setAttribute('class', 'subsystem-cluster-header');
+    headerG.setAttribute('title', isAr ? `اسحب لتحريك نظام ${title} كاملاً` : `Drag to move ${title} subsystem group`);
+
+    const headerW = Math.min(boxW - 16, Math.max(120, (title.length + countLabel.length) * 8 + 36));
+    const headerRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    headerRect.setAttribute('x', boxX + 8);
+    headerRect.setAttribute('y', boxY + 4);
+    headerRect.setAttribute('width', headerW);
+    headerRect.setAttribute('height', 22);
+    headerRect.setAttribute('fill', color);
+    headerRect.setAttribute('fill-opacity', '0.22');
+    headerRect.setAttribute('stroke', color);
+    headerRect.setAttribute('stroke-width', '1');
+    headerG.appendChild(headerRect);
+
+    const headerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    headerText.setAttribute('class', 'subsystem-cluster-title');
+    headerText.setAttribute('x', boxX + 16);
+    headerText.setAttribute('y', boxY + 19);
+    headerText.textContent = `${title} (${countLabel})`;
+    headerG.appendChild(headerText);
+
+    // Subsystem Header Drag (moves all member tables together + Undo stack!)
+    headerG.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      const startMx = e.clientX;
+      const startMy = e.clientY;
+      const initPositions = {};
+      members.forEach(t => {
+        initPositions[t] = { x: tablePositions[t].x, y: tablePositions[t].y };
+      });
+
+      function onMouseMove(moveEv) {
+        const dx = (moveEv.clientX - startMx) / zoom;
+        const dy = (moveEv.clientY - startMy) / zoom;
+        members.forEach(t => {
+          tablePositions[t].x = Math.round(initPositions[t].x + dx);
+          tablePositions[t].y = Math.round(initPositions[t].y + dy);
+          const node = document.getElementById(`node-${t}`);
+          if (node) node.setAttribute('transform', `translate(${tablePositions[t].x}, ${tablePositions[t].y})`);
+        });
+        renderRelationships();
+        renderSubsystemClusters();
+        updateMinimap();
+      }
+
+      function onMouseUp() {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+
+        // Record to Undo stack!
+        const finalPositions = {};
+        members.forEach(t => {
+          finalPositions[t] = { x: tablePositions[t].x, y: tablePositions[t].y };
+        });
+        if (typeof pushUndoAction === 'function') {
+          pushUndoAction({
+            type: 'MOVE_TABLES',
+            description: isAr ? `تحريك نظام ${title}` : `Move ${title} Subsystem`,
+            prevPositions: initPositions,
+            newPositions: finalPositions
+          });
+        }
+        if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+      }
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    });
+
+    g.appendChild(headerG);
+    layer.appendChild(g);
+  });
+}
+
+// --- 4. FK DEPENDENCY PATH TRACER ---
+function traceTableDependencies(tableName) {
+  if (!tableName || !tablesData[tableName]) return;
+  activeTracerTable = tableName;
+  activeTracerRelKeys = new Set();
+
+  const upstreamSet = new Set();
+  const downstreamSet = new Set();
+
+  // 1. Recursive Upstream BFS (Parents & Ancestors)
+  const upQueue = [tableName];
+  const upVisited = new Set([tableName]);
+  while (upQueue.length > 0) {
+    const cur = upQueue.shift();
+    fkList.forEach(fk => {
+      if (fk.child === cur && selectedTables.has(fk.parent)) {
+        upstreamSet.add(fk.parent);
+        activeTracerRelKeys.add(fk.parent + '->' + fk.child);
+        if (!upVisited.has(fk.parent)) {
+          upVisited.add(fk.parent);
+          upQueue.push(fk.parent);
+        }
+      }
+    });
+  }
+
+  // 2. Recursive Downstream BFS (Children & Descendants)
+  const downQueue = [tableName];
+  const downVisited = new Set([tableName]);
+  while (downQueue.length > 0) {
+    const cur = downQueue.shift();
+    fkList.forEach(fk => {
+      if (fk.parent === cur && selectedTables.has(fk.child)) {
+        downstreamSet.add(fk.child);
+        activeTracerRelKeys.add(fk.parent + '->' + fk.child);
+        if (!downVisited.has(fk.child)) {
+          downVisited.add(fk.child);
+          downQueue.push(fk.child);
+        }
+      }
+    });
+  }
+
+  // Apply styling on table cards
+  Array.from(selectedTables).forEach(t => {
+    const node = document.getElementById(`node-${t}`);
+    if (!node) return;
+    node.classList.remove('tracer-root', 'tracer-upstream', 'tracer-downstream', 'tracer-dimmed');
+    if (t === tableName) {
+      node.classList.add('tracer-root');
+    } else if (upstreamSet.has(t)) {
+      node.classList.add('tracer-upstream');
+    } else if (downstreamSet.has(t)) {
+      node.classList.add('tracer-downstream');
+    } else {
+      node.classList.add('tracer-dimmed');
+    }
+  });
+
+  // Re-render relationships to apply dimming / active glow
+  renderRelationships();
+
+  // Populate Floating Dependency Tracer Bar
+  const bar = document.getElementById('dependencyTracerBar');
+  const breadcrumb = document.getElementById('tracerBreadcrumb');
+  const stats = document.getElementById('tracerStats');
+  if (bar && breadcrumb) {
+    const isAr = (typeof currentLang !== 'undefined' && currentLang === 'ar');
+    bar.style.display = 'flex';
+
+    let chainHtml = '';
+    if (upstreamSet.size > 0) {
+      chainHtml += `<span class="tracer-chip upstream">⬆ ${isAr ? 'الآباء' : 'Upstream'} (${upstreamSet.size})</span><span class="tracer-arrow">➔</span>`;
+    }
+    chainHtml += `<span class="tracer-chip root">★ ${tableName}</span>`;
+    if (downstreamSet.size > 0) {
+      chainHtml += `<span class="tracer-arrow">➔</span><span class="tracer-chip downstream">⬇ ${isAr ? 'التابعين' : 'Downstream'} (${downstreamSet.size})</span>`;
+    }
+    breadcrumb.innerHTML = chainHtml;
+
+    if (stats) {
+      stats.innerHTML = `<span style="font-size:11px; color:var(--text-muted);">${isAr ? 'مسار تكامل البيانات المرتبط' : 'Active Lineage Subgraph'}</span>`;
+    }
+  }
+
+  updateMinimap();
+}
+
+function clearDependencyTrace() {
+  activeTracerTable = null;
+  activeTracerRelKeys.clear();
+
+  Array.from(selectedTables).forEach(t => {
+    const node = document.getElementById(`node-${t}`);
+    if (node) {
+      node.classList.remove('tracer-root', 'tracer-upstream', 'tracer-downstream', 'tracer-dimmed');
+    }
+  });
+
+  const bar = document.getElementById('dependencyTracerBar');
+  if (bar) bar.style.display = 'none';
+
+  renderRelationships();
+  updateMinimap();
+}
+
+function traceSelectedTableDependencies() {
+  if (selectedTableNodes && selectedTableNodes.size > 0) {
+    const t = Array.from(selectedTableNodes)[0];
+    traceTableDependencies(t);
+  }
+}
+
+// --- 5. FLYOUT DRAWERS & POPOVERS ---
+function toggleLegendsFlyout(force) {
+  const flyout = document.getElementById('legendsFlyout');
+  const btn = document.getElementById('dockBtnLegends');
+  if (!flyout) return;
+  const isHidden = (flyout.style.display === 'none');
+  const next = (typeof force === 'boolean') ? force : isHidden;
+  flyout.style.display = next ? 'flex' : 'none';
+  if (btn) btn.classList.toggle('active', next);
+  if (next && typeof renderLegend === 'function') renderLegend();
+}
+
+function toggleHintsPopover(force) {
+  const popover = document.getElementById('hintsPopover');
+  const btn = document.getElementById('dockBtnHints');
+  if (!popover) return;
+  const isHidden = (popover.style.display === 'none');
+  const next = (typeof force === 'boolean') ? force : isHidden;
+  popover.style.display = next ? 'block' : 'none';
+  if (btn) btn.classList.toggle('active', next);
 }

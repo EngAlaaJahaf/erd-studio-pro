@@ -126,134 +126,149 @@
     <!-- ═══════════════════════════════════════════════════════════
          COMMAND BAR (Topbar)
     ══════════════════════════════════════════════════════════════ -->
-    <header class="topbar" role="banner">
-      <!-- Start section: Brand & Schema Stats -->
-      <div class="topbar-section topbar-start">
-        <div class="brand-group">
-          <div class="brand-logo">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="3" width="7" height="5" rx="1"/>
-              <rect x="15" y="3" width="7" height="5" rx="1"/>
-              <rect x="2" y="16" width="7" height="5" rx="1"/>
-              <rect x="15" y="16" width="7" height="5" rx="1"/>
-              <line x1="9" y1="5.5" x2="15" y2="5.5"/>
-              <line x1="9" y1="18.5" x2="15" y2="18.5"/>
-              <line x1="5.5" y1="8" x2="5.5" y2="16"/>
-              <line x1="18.5" y1="8" x2="18.5" y2="16"/>
-            </svg>
-          </div>
-          <div class="brand-text">
-            <span class="brand-title">ERD Studio Pro</span>
-            <span class="brand-badge hide-compact">Oracle 21c · SQLite</span>
-          </div>
+      <!-- ═══════════════════════════════════════════════════════════
+       UNIFIED STUDIO TOPBAR
+  ══════════════════════════════════════════════════════════════ -->
+  <header class="topbar studio-header" role="banner">
+    <!-- Start: Brand, DB Connection & Quick Stats -->
+    <div class="topbar-section topbar-start">
+      <div class="brand-group">
+        <div class="brand-logo" title="ERD Studio Pro">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="7" height="5" rx="1"/>
+            <rect x="15" y="3" width="7" height="5" rx="1"/>
+            <rect x="2" y="16" width="7" height="5" rx="1"/>
+            <rect x="15" y="16" width="7" height="5" rx="1"/>
+            <line x1="9" y1="5.5" x2="15" y2="5.5"/>
+            <line x1="9" y1="18.5" x2="15" y2="18.5"/>
+            <line x1="5.5" y1="8" x2="5.5" y2="16"/>
+            <line x1="18.5" y1="8" x2="18.5" y2="16"/>
+          </svg>
         </div>
-
-        <div class="divider hide-compact"></div>
-
-        <div class="stat-chip hide-compact">
-          <span class="stat-dot"></span>
-          <span id="statSummary">—</span>
+        <div class="brand-text">
+          <span class="brand-title">ERD Studio Pro</span>
+          <span class="brand-badge hide-compact">Oracle 21c · SQLite</span>
         </div>
       </div>
 
-      <!-- Center section: View Tabs & Diagram Controls -->
-      <div class="topbar-section topbar-center">
-        <!-- View Navigation Tabs -->
-        <div class="view-tabs hide-tablet" role="tablist" aria-label="Application Views">
-          <button class="view-tab active" id="viewTabCanvas" role="tab" aria-selected="true" onclick="switchView('canvas'); setViewTab(this)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/><rect x="14" y="16" width="7" height="5" rx="1"/><line x1="10" y1="5.5" x2="14" y2="5.5"/><line x1="6.5" y1="8" x2="6.5" y2="16"/><line x1="17.5" y1="8" x2="17.5" y2="16"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg>
-            <span id="i18n-viewCanvas">المخطط</span>
-          </button>
-          <button class="view-tab" id="viewTabImport" role="tab" aria-selected="false" onclick="switchView('import'); setViewTab(this)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span id="i18n-viewImport">استيراد</span>
-          </button>
-          <button class="view-tab" id="viewTabExport" role="tab" aria-selected="false" onclick="switchView('export'); setViewTab(this)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span id="i18n-viewExport">تصدير</span>
-          </button>
-          <button class="view-tab" id="viewTabAudit" role="tab" aria-selected="false" onclick="switchView('audit'); setViewTab(this)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-            <span id="i18n-viewAudit">الهندسة والتدقيق</span>
-          </button>
-        </div>
+      <div class="divider hide-compact"></div>
 
-        <!-- Controls Dropdowns Group -->
-        <div class="topbar-controls-group">
-          <!-- Layout Preset -->
-          <div class="select-with-icon" id="wrap-presetSelect">
-            <span class="select-prefix-icon" id="icon-presetSelect">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6M12 9l-6 6M12 9l6 6"/><circle cx="12" cy="4" r="1.8"/><circle cx="6" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/></svg>
-            </span>
-            <select id="presetSelect" class="select-clean with-prefix-icon" onchange="applyPresetLayout(this.value); updateControlIcons();" title="Layout Preset">
-              <option value="hierarchical" id="opt-hierarchical" selected>⑂ هرمي</option>
-              <option value="grid" id="opt-grid">▦ شبكي</option>
-              <option value="cluster" id="opt-cluster">❖ مجموعات</option>
-              <option value="circular" id="opt-circular">◎ دائري</option>
-              <option value="force" id="opt-force">☍ فيزيائي</option>
-              <option value="star" id="opt-star">★ نجمي</option>
-            </select>
-          </div>
+      <!-- Live Diagram Stats -->
+      <div class="stat-chip hide-compact" title="إحصائيات المخطط الحالي">
+        <span class="stat-dot"></span>
+        <span id="statSummary">جاري التحميل...</span>
+      </div>
+    </div>
 
-          <!-- Column View Mode -->
-          <div class="select-with-icon" id="wrap-globalViewModeSelect">
-            <span class="select-prefix-icon" id="icon-globalViewModeSelect">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-            </span>
-            <select id="globalViewModeSelect" class="select-clean with-prefix-icon" onchange="setGlobalViewMode(this.value); updateControlIcons();" title="Column Visibility">
-              <option value="no-audit" id="opt-no-audit" selected>◫ بدون تدقيق</option>
-              <option value="keys-only" id="opt-keys-only">⚿ مفاتيح فقط</option>
-              <option value="all-columns" id="opt-all-columns">☰ كل الحقول</option>
-            </select>
-          </div>
-
-          <!-- Theme Switch Button (Dark / Light) -->
-          <button class="theme-switch-btn" id="themeToggleBtn" onclick="toggleThemeSwitch()" title="تبديل المظهر (فاتح / داكن) | Toggle Theme (Light / Dark)" aria-label="Toggle Theme">
-            <span class="theme-switch-track">
-              <span class="theme-switch-thumb">
-                <svg class="theme-icon icon-moon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                <svg class="theme-icon icon-sun" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-              </span>
-            </span>
-            <span class="theme-switch-label" id="themeSwitchLabel">فاتح</span>
-          </button>
-        </div>
+    <!-- Center: Studio Navigation Tabs & Spotlight Command Bar -->
+    <div class="topbar-section topbar-center">
+      <!-- Modern View Segmented Switcher -->
+      <div class="view-tabs hide-tablet" role="tablist" aria-label="Application Views">
+        <button class="view-tab active" id="viewTabCanvas" role="tab" aria-selected="true" onclick="switchView('canvas'); setViewTab(this)" title="مخطط العلاقات (ERD Diagram)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/><rect x="14" y="16" width="7" height="5" rx="1"/><line x1="10" y1="5.5" x2="14" y2="5.5"/><line x1="6.5" y1="8" x2="6.5" y2="16"/><line x1="17.5" y1="8" x2="17.5" y2="16"/><line x1="10" y1="18.5" x2="14" y2="18.5"/></svg>
+          <span id="i18n-viewCanvas">المخطط</span>
+        </button>
+        <button class="view-tab" id="viewTabImport" role="tab" aria-selected="false" onclick="switchView('import'); setViewTab(this)" title="استيراد البيانات والمخططات (Import)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span id="i18n-viewImport">استيراد</span>
+        </button>
+        <button class="view-tab" id="viewTabExport" role="tab" aria-selected="false" onclick="switchView('export'); setViewTab(this)" title="تصدير المخطط والتقارير (Export)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span id="i18n-viewExport">تصدير</span>
+        </button>
+        <button class="view-tab" id="viewTabAudit" role="tab" aria-selected="false" onclick="switchView('audit'); setViewTab(this)" title="الهندسة والتدقيق والمقارنة (Audit & Engineering)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span id="i18n-viewAudit">الهندسة والتدقيق</span>
+        </button>
       </div>
 
-      <!-- End section: Actions & Tool Toggles -->
-      <div class="topbar-section topbar-end">
-        <!-- Sync DB -->
-        <button class="btn-tool hide-compact" id="syncOracleBtn" title="Sync live schema from Oracle DB" onclick="syncWithOracleDB()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          <span class="btn-label-text">مزامنة</span>
-        </button>
+      <!-- Spotlight Search Trigger (Command Palette) -->
+      <button class="spotlight-trigger-btn" id="spotlightTriggerBtn" onclick="openSpotlightSearch()" title="البحث الشامل في الجداول والحقول (Ctrl+K) | Spotlight Search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span class="spotlight-btn-text" id="i18n-spotlightBtn">بحث سريع في الجداول والحقول...</span>
+        <kbd class="spotlight-kbd">Ctrl K</kbd>
+      </button>
 
-        <!-- AI Assistant -->
-        <button class="btn-tool" id="aiToggleBtn" onclick="toggleAIPanel()" title="AI Assistant (Ctrl+K)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><rect x="4" y="8" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-          <span class="btn-label-text">AI</span>
-        </button>
+      <!-- Compact Layout & Display Controls -->
+      <div class="topbar-controls-group">
+        <!-- Layout Preset Select -->
+        <div class="select-with-icon" id="wrap-presetSelect" title="نمط التخطيط والترتيب">
+          <span class="select-prefix-icon" id="icon-presetSelect">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v6M12 9l-6 6M12 9l6 6"/><circle cx="12" cy="4" r="1.8"/><circle cx="6" cy="18" r="1.8"/><circle cx="18" cy="18" r="1.8"/></svg>
+          </span>
+          <select id="presetSelect" class="select-clean with-prefix-icon" onchange="applyPresetLayout(this.value); updateControlIcons();" title="Layout Preset">
+            <option value="hierarchical" id="opt-hierarchical" selected>⑂ هرمي</option>
+            <option value="grid" id="opt-grid">▦ شبكي</option>
+            <option value="cluster" id="opt-cluster">❖ مجموعات</option>
+            <option value="circular" id="opt-circular">◎ دائري</option>
+            <option value="force" id="opt-force">☍ فيزيائي</option>
+            <option value="star" id="opt-star">★ نجمي</option>
+          </select>
+        </div>
 
-        <!-- Legends group -->
-        <button class="btn-tool btn-icon" id="subsysToggleBtn" onclick="toggleSubsysLegend()" title="Subsystems Legend">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        </button>
-        <button class="btn-tool btn-icon" id="relToggleBtn" onclick="toggleRelLegend()" title="Relationship Types Legend">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </button>
+        <!-- Column View Mode Select -->
+        <div class="select-with-icon" id="wrap-globalViewModeSelect" title="مستوى تفاصيل الحقول">
+          <span class="select-prefix-icon" id="icon-globalViewModeSelect">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          </span>
+          <select id="globalViewModeSelect" class="select-clean with-prefix-icon" onchange="setGlobalViewMode(this.value); updateControlIcons();" title="Column Visibility">
+            <option value="no-audit" id="opt-no-audit" selected>◫ بدون تدقيق</option>
+            <option value="keys-only" id="opt-keys-only">⚿ مفاتيح فقط</option>
+            <option value="all-columns" id="opt-all-columns">☰ كل الحقول</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-        <div class="divider"></div>
+    <!-- End: Actions, Undo/Redo, AI & Theme -->
+    <div class="topbar-section topbar-end">
+      <!-- Sync DB -->
+      <button class="btn-tool hide-compact" id="syncOracleBtn" title="Sync live schema from Oracle DB" onclick="syncWithOracleDB()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span class="btn-label-text">مزامنة</span>
+      </button>
 
-        <!-- Persistence Actions -->
-        <button class="btn-tool primary" id="i18n-saveLayout" onclick="saveStateToSQLite()" title="Save diagram layout">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          <span class="btn-label-text">حفظ</span>
+      <!-- AI Assistant -->
+      <button class="btn-tool btn-ai" id="aiToggleBtn" onclick="toggleAIPanel()" title="المساعد الذكي للنمذجة والتوثيق (Ctrl+K)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><rect x="4" y="8" width="16" height="12" rx="2"/><circle cx="9" cy="13" r="1.5" fill="currentColor"/><circle cx="15" cy="13" r="1.5" fill="currentColor"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        <span class="btn-label-text">AI</span>
+      </button>
+
+      <!-- Sleek Theme Toggle Icon Button -->
+      <button class="btn-tool btn-icon" id="themeToggleBtn" onclick="toggleThemeSwitch()" title="تبديل المظهر (فاتح / داكن) | Toggle Theme" aria-label="Toggle Theme">
+        <svg class="theme-icon icon-moon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="theme-icon icon-sun" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <span class="theme-switch-label" id="themeSwitchLabel" style="display:none;">فاتح</span>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Undo / Redo Group -->
+      <div class="undo-redo-group" role="group" aria-label="Undo and Redo">
+        <button class="btn-tool btn-icon" id="btnUndo" onclick="undoAction()" disabled title="تراجع (Ctrl+Z) | Undo" aria-label="Undo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
         </button>
-        <button class="btn-tool btn-icon" id="i18n-resetLayout" onclick="resetToInitial()" title="إعادة ضبط المخطط">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+        <button class="btn-tool btn-icon" id="btnRedo" onclick="redoAction()" disabled title="إعادة (Ctrl+Y) | Redo" aria-label="Redo">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
         </button>
       </div>
-    </header>
+
+      <!-- Save & Reset Layout -->
+      <button class="btn-tool primary" id="i18n-saveLayout" onclick="saveStateToSQLite()" title="حفظ ترتيب المخطط (Save Layout)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span class="btn-label-text">حفظ</span>
+      </button>
+      <button class="btn-tool btn-icon" id="i18n-resetLayout" onclick="resetToInitial()" title="إعادة ضبط المخطط (Reset)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+      </button>
+
+      <!-- Legacy triggers kept hidden for full JS compatibility -->
+      <div style="display:none;">
+        <button id="subsysToggleBtn" onclick="toggleSubsysLegend()"></button>
+        <button id="relToggleBtn" onclick="toggleRelLegend()"></button>
+      </div>
+    </div>
+  </header>
 
     <!-- ===== WORKSPACE TABS (multi-page diagrams) ===== -->
     <div class="ws-bar" id="wsBar" title=""></div>
@@ -281,6 +296,10 @@
         <button class="btn-tool btn-sm" id="i18n-btnShowAll" onclick="showAllForSelected()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           All
+        </button>
+        <button class="btn-tool btn-sm" id="i18n-btnTraceLineage" onclick="traceSelectedTableDependencies()" title="تتبع شجرة التبعيات والعلاقات (FK Lineage Tracer)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4-4-4 4"/><circle cx="12" cy="14" r="4"/></svg>
+          <span class="btn-label-text" id="i18n-traceLineageLabel">تتبع التبعيات</span>
         </button>
       </div>
       <div id="barMultiActions" style="display:none; gap:6px;">
@@ -335,98 +354,191 @@
         </defs>
 
         <g id="canvasLayer" dir="ltr">
+          <g id="subsystemClustersLayer" dir="ltr"></g>
           <g id="relationsLayer" dir="ltr"></g>
           <g id="tablesLayer" dir="ltr"></g>
         </g>
       </svg>
 
-      <!-- Bottom Floating Hint -->
-      <div class="floating-hint" id="floatingHint">
-        <span id="i18n-hintCtrlDrag">
-          <kbd>Ctrl</kbd> + <b>Drag:</b> Multi-select
-        </span>
-        <span style="color:var(--text-subtle)">·</span>
-        <span id="i18n-hintDragTable">
-          <b>Drag table:</b> Move
-        </span>
-        <span style="color:var(--text-subtle)">·</span>
-        <span id="i18n-hintZoom">
-          <b>Scroll:</b> Zoom
-        </span>
-      </div>
-
-      <!-- HUD Zoom Controls -->
-      <div class="hud-controls" role="toolbar" aria-label="Zoom controls">
-        <button class="hud-btn" title="Zoom In" onclick="zoomCanvas(1.2)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-        </button>
-        <button class="hud-btn" title="Reset Zoom (1:1)" onclick="resetCanvasTransform()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-        </button>
-        <button class="hud-btn" title="Zoom Out" onclick="zoomCanvas(0.8)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-        </button>
-        <button class="hud-btn" title="Fit to View" onclick="fitView()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            <!-- FK Dependency Path Tracer Bar (Floating Top Center) -->
+      <div class="dependency-tracer-bar" id="dependencyTracerBar" style="display:none;">
+        <div class="tracer-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4-4-4 4"/><circle cx="12" cy="14" r="4"/></svg>
+          <span id="tracerTitle">تتبع شجرة التبعيات والنسب</span>
+        </div>
+        <div class="tracer-chips-chain" id="tracerBreadcrumb"></div>
+        <div class="tracer-stats" id="tracerStats"></div>
+        <button class="btn-tool btn-sm danger" id="btnClearTracer" onclick="clearDependencyTrace()" title="إلغاء التتبع والعودة للمخطط الكامل">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span id="i18n-clearTracerText">إلغاء التتبع</span>
         </button>
       </div>
 
-      <!-- Subsystem Legend -->
-      <div class="subsys-legend" id="subsysLegend">
-        <div class="legend-title" id="i18n-legendTitle">الأنظمة الفرعية</div>
-        <div class="legend-list" id="legendList"></div>
+      <!-- Interactive Minimap (Bird's Eye View - Floating Bottom Right) -->
+      <div class="minimap-card" id="minimapCard">
+        <div class="minimap-header">
+          <div class="minimap-header-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span id="i18n-minimapTitle">خريطة المخطط</span>
+          </div>
+          <button class="minimap-toggle-btn" id="btnMinimapCollapse" onclick="toggleMinimapCollapse()" title="طي / فتح الخريطة">
+            <svg class="icon-collapse" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <div class="minimap-body" id="minimapBody">
+          <svg id="minimapSvg" preserveAspectRatio="none">
+            <g id="minimapClustersLayer"></g>
+            <g id="minimapNodesLayer"></g>
+            <rect id="minimapViewport" class="minimap-viewport" x="0" y="0" width="40" height="30" rx="3"></rect>
+          </svg>
+        </div>
       </div>
 
-      <!-- Relationship Types Legend -->
-      <div class="subsys-legend" id="relLegend" style="display:none; min-width:230px;">
-        <div class="legend-title" id="i18n-relLegendTitle">خطوط العلاقات</div>
-        <div class="legend-list">
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
-              <path d="M 3 6 L 21 6" stroke="#0d9488" stroke-width="2.2" fill="none"/>
-              <path d="M 21 2.5 L 31 6 L 21 9.5 Z" fill="#0d9488"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegIdent">Identifying (solid): FK is part of child PK</span>
+      <!-- Modern Unified Floating Canvas Dock (Bottom Center) -->
+      <div class="canvas-dock" id="canvasDock" role="toolbar" aria-label="Canvas Navigation Dock">
+        <!-- Zoom Group -->
+        <div class="dock-group">
+          <button class="dock-btn" id="dockBtnZoomOut" title="تصغير (Zoom Out)" onclick="zoomCanvas(0.8)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button class="dock-btn dock-btn-text" id="dockBtnZoomReset" title="إعادة ضبط التقريب (100%)" onclick="resetCanvasTransform()">
+            <span id="dockZoomLabel">100%</span>
+          </button>
+          <button class="dock-btn" id="dockBtnZoomIn" title="تكبير (Zoom In)" onclick="zoomCanvas(1.2)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button class="dock-btn" id="dockBtnFit" title="ملاءمة للمخطط (Fit to View)" onclick="fitView()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          </button>
+        </div>
+
+        <div class="dock-divider"></div>
+
+        <!-- Canvas Intelligence Group -->
+        <div class="dock-group">
+          <!-- Orthogonal 90° vs Curved Lines -->
+          <button class="dock-btn" id="btnRoutingMode" onclick="toggleRelationshipRoutingMode()" title="نمط الخطوط: متعامد 90° / منحني (Smart Manhattan Routing)">
+            <svg id="iconRoutingOrthogonal" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 20 4 10 20 10 20 4"/><circle cx="4" cy="20" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/></svg>
+            <svg id="iconRoutingCurved" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M4 20 C 4 10, 20 14, 20 4"/><circle cx="4" cy="20" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/></svg>
+          </button>
+
+          <!-- Subsystem Cluster Containers -->
+          <button class="dock-btn" id="btnSubsystemClusters" onclick="toggleSubsystemClusters()" title="إطارات الأنظمة الفرعية (Subsystem Container Boxes)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 3"/><rect x="7" y="7" width="4" height="4"/><rect x="13" y="7" width="4" height="4"/><rect x="7" y="13" width="10" height="4"/></svg>
+          </button>
+
+          <!-- Minimap Toggle Button -->
+          <button class="dock-btn" id="btnMinimapDock" onclick="toggleMinimap()" title="إظهار / إخفاء الخريطة المصغرة (Minimap)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </button>
+
+          <!-- Legends Flyout Drawer Toggle -->
+          <button class="dock-btn" id="dockBtnLegends" onclick="toggleLegendsFlyout()" title="مفاتيح الرموز والأنظمة الفرعية (Legends)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </button>
+
+          <!-- Shortcuts & Navigation Hints -->
+          <button class="dock-btn" id="dockBtnHints" onclick="toggleHintsPopover()" title="اختصارات التحكم بالكانفاس (Shortcuts)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- On-Demand Legends Flyout Drawer (Replaces permanent clutter) -->
+      <div class="legends-flyout" id="legendsFlyout" style="display:none;">
+        <div class="legends-flyout-header">
+          <span class="legends-flyout-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span id="i18n-legendsFlyoutTitle">مفاتيح الرموز والأنظمة الفرعية</span>
+          </span>
+          <button class="flyout-close-btn" onclick="toggleLegendsFlyout(false)" title="إغلاق">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="legends-flyout-body">
+          <!-- Subsystems Legend -->
+          <div class="subsys-legend" id="subsysLegend">
+            <div class="legend-title" id="i18n-legendTitle">الأنظمة الفرعية</div>
+            <div class="legend-list" id="legendList"></div>
           </div>
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="14" viewBox="0 0 34 14" style="flex:0 0 auto">
-              <path d="M 3 7 L 20 7" stroke="#64748b" stroke-width="1.7" fill="none" stroke-dasharray="5 3"/>
-              <path d="M 20 2 L 29 7 M 20 7 L 29 7 M 20 12 L 29 7" stroke="#64748b" stroke-width="1.7" fill="none"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegNonIdent">Non-identifying (dashed): independent FK</span>
-          </div>
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
-              <path d="M 3 6 L 27 6" stroke="#64748b" stroke-width="1.7" fill="none"/>
-              <path d="M 30 1 L 30 11" stroke="#64748b" stroke-width="2.2" fill="none"/>
-              <path d="M 3 2 L 3 10" stroke="#0d9488" stroke-width="2.2" fill="none"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegCard">Thick bar = one | crow's foot = many</span>
-          </div>
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
-              <path d="M 3 6 L 24 6" stroke="#64748b" stroke-width="1.7" fill="none" stroke-dasharray="5 3"/>
-              <circle cx="29" cy="6" r="3.6" stroke="#64748b" stroke-width="1.8" fill="none"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegOptional">Circle = optional (nullable FK)</span>
-          </div>
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="14" viewBox="0 0 34 14" style="flex:0 0 auto">
-              <path d="M 5 6 C 18 -3, 29 11, 5 9" stroke="#8b5cf6" stroke-width="1.8" fill="none" stroke-dasharray="5 3"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegSelf">Purple loop = self-reference</span>
-          </div>
-          <div class="legend-item" style="cursor:default">
-            <svg width="34" height="10" style="flex:0 0 auto">
-              <circle cx="6" cy="5" r="3" fill="#2563eb"/>
-              <circle cx="14" cy="5" r="3" fill="#059669"/>
-              <circle cx="22" cy="5" r="3" fill="#db2777"/>
-              <circle cx="30" cy="5" r="3" fill="#f59e0b"/>
-            </svg>
-            <span class="legend-label" id="i18n-relLegColor">Line color = subsystem color</span>
+          <!-- Relationship Types Legend -->
+          <div class="subsys-legend" id="relLegend" style="min-width:230px;">
+            <div class="legend-title" id="i18n-relLegendTitle">أنواع العلاقات</div>
+            <div class="legend-list">
+              <div class="legend-item" style="cursor:default">
+                <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
+                  <path d="M 3 6 L 21 6" stroke="#0d9488" stroke-width="2.2" fill="none"/>
+                  <path d="M 21 2.5 L 31 6 L 21 9.5 Z" fill="#0d9488"/>
+                </svg>
+                <span class="legend-label" id="i18n-relLegIdent">Identifying (solid): FK is part of child PK</span>
+              </div>
+              <div class="legend-item" style="cursor:default">
+                <svg width="34" height="14" viewBox="0 0 34 14" style="flex:0 0 auto">
+                  <path d="M 3 7 L 20 7" stroke="#64748b" stroke-width="1.7" fill="none" stroke-dasharray="5 3"/>
+                  <path d="M 20 2 L 29 7 M 20 7 L 29 7 M 20 12 L 29 7" stroke="#64748b" stroke-width="1.7" fill="none"/>
+                </svg>
+                <span class="legend-label" id="i18n-relLegNonIdent">Non-identifying (dashed): independent FK</span>
+              </div>
+              <div class="legend-item" style="cursor:default">
+                <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
+                  <path d="M 3 6 L 27 6" stroke="#64748b" stroke-width="1.7" fill="none"/>
+                  <path d="M 30 1 L 30 11" stroke="#64748b" stroke-width="2.2" fill="none"/>
+                  <path d="M 3 2 L 3 10" stroke="#0d9488" stroke-width="2.2" fill="none"/>
+                </svg>
+                <span class="legend-label" id="i18n-relLegCard">Thick bar = one | crow's foot = many</span>
+              </div>
+              <div class="legend-item" style="cursor:default">
+                <svg width="34" height="12" viewBox="0 0 34 12" style="flex:0 0 auto">
+                  <path d="M 3 6 L 24 6" stroke="#64748b" stroke-width="1.7" fill="none" stroke-dasharray="5 3"/>
+                  <circle cx="29" cy="6" r="3.6" stroke="#64748b" stroke-width="1.8" fill="none"/>
+                </svg>
+                <span class="legend-label" id="i18n-relLegOptional">Circle = optional (nullable FK)</span>
+              </div>
+              <div class="legend-item" style="cursor:default">
+                <svg width="34" height="14" viewBox="0 0 34 14" style="flex:0 0 auto">
+                  <path d="M 5 6 C 18 -3, 29 11, 5 9" stroke="#8b5cf6" stroke-width="1.8" fill="none" stroke-dasharray="4 3"/>
+                  <circle cx="5" cy="6" r="2.5" fill="#8b5cf6"/>
+                </svg>
+                <span class="legend-label" id="i18n-relLegSelf">Purple loop = self-reference</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- On-Demand Shortcuts Popover (Replaces permanent bottom text) -->
+      <div class="hints-popover" id="hintsPopover" style="display:none;">
+        <div class="hints-popover-header">
+          <div class="hints-header-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
+            <span>اختصارات التحكم بالكانفاس</span>
+          </div>
+          <button class="flyout-close-btn" onclick="toggleHintsPopover(false)" title="إغلاق">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="hints-popover-body">
+          <div class="hint-row"><kbd>Ctrl</kbd> + <b>سحب بالفأرة</b> <span>تحديد متعدد للجداول (Marquee Box)</span></div>
+          <div class="hint-row"><kbd>سحب الجدول</kbd> <span>تحريك الجدول أو المجموعة المحددة</span></div>
+          <div class="hint-row"><kbd>عجلة الفأرة</kbd> <span>تقريب وتصغير الكانفاس (Zoom)</span></div>
+          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>K</kbd> <span>البحث الشامل والمساعد الذكي</span></div>
+          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>Z</kbd> <span>التراجع عن أي حركة (Undo)</span></div>
+          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>Y</kbd> <span>إعادة الحركة (Redo)</span></div>
+          <div class="hint-row"><kbd>B</kbd> <span>طي / فتح القائمة الجانبية (Sidebar)</span></div>
+        </div>
+      </div>
+
+      <!-- Hidden legacy elements for 100% JS backwards compatibility -->
+      <div style="display:none;">
+        <div class="floating-hint" id="floatingHint"></div>
+        <div class="hud-controls" id="hudControls">
+          <button class="hud-btn" onclick="zoomCanvas(1.2)"></button>
+          <button class="hud-btn" onclick="resetCanvasTransform()"></button>
+          <button class="hud-btn" onclick="zoomCanvas(0.8)"></button>
+          <button class="hud-btn" onclick="fitView()"></button>
+        </div>
+      </div>
+
     </div>
     </section>
 
@@ -847,6 +959,50 @@
     </footer>
   </main>
 
+</div>
+
+<!-- MODAL DIALOG: SPOTLIGHT SEARCH (Ctrl + K) -->
+<div class="modal-backdrop spotlight-backdrop" id="spotlightModal" style="display:none;" onclick="closeSpotlightOnBackdrop(event)">
+  <div class="modal-card spotlight-card" onclick="event.stopPropagation()">
+    <!-- Spotlight Search Input Bar -->
+    <div class="spotlight-input-row">
+      <span class="spotlight-input-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </span>
+      <input type="text" id="spotlightInput" class="spotlight-input" placeholder="ابحث في الجداول، الحقول، الأنواع، الأنظمة... [Ctrl+K]" spellcheck="false" autocomplete="off" oninput="onSpotlightInput(this.value)" onkeydown="onSpotlightKeydown(event)" />
+      <div class="spotlight-input-actions">
+        <kbd class="spotlight-esc-badge" onclick="closeSpotlightSearch()" title="Close (ESC)">ESC</kbd>
+      </div>
+    </div>
+
+    <!-- Category Filter Chips -->
+    <div class="spotlight-filters">
+      <button class="spotlight-chip active" data-cat="all" onclick="setSpotlightCategory('all', this)">الكل (All)</button>
+      <button class="spotlight-chip" data-cat="tables" onclick="setSpotlightCategory('tables', this)">الجداول (Tables)</button>
+      <button class="spotlight-chip" data-cat="columns" onclick="setSpotlightCategory('columns', this)">الحقول (Columns)</button>
+      <button class="spotlight-chip" data-cat="types" onclick="setSpotlightCategory('types', this)">الأنواع (Types)</button>
+      <span class="spotlight-count" id="spotlightMatchCount">0 نتيجة</span>
+    </div>
+
+    <!-- Results List -->
+    <div class="spotlight-results" id="spotlightResultsList" role="listbox">
+      <!-- Generated dynamically by JS -->
+    </div>
+
+    <!-- Keyboard Shortcuts Footer Hint -->
+    <div class="spotlight-footer">
+      <div class="spotlight-hints">
+        <span><kbd>↑</kbd><kbd>↓</kbd> للتنقل</span>
+        <span class="hint-sep">·</span>
+        <span><kbd>↵</kbd> للاختيار والتركيز</span>
+        <span class="hint-sep">·</span>
+        <span><kbd>ESC</kbd> للإغلاق</span>
+      </div>
+      <div class="spotlight-brand">
+        <span>ERD Spotlight</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL DIALOG: COLUMN MANAGER PER TABLE -->

@@ -246,10 +246,12 @@ def _pick_best_key(matches):
 def _neighbors(table, fk_list):
     nbrs = set()
     for f in fk_list:
-        if f["parent"] == table:
-            nbrs.add(f["child"])
-        if f["child"] == table:
-            nbrs.add(f["parent"])
+        p = f.get("parent") or f.get("parent_table")
+        c = f.get("child") or f.get("child_table")
+        if p and p == table and c:
+            nbrs.add(c)
+        if c and c == table and p:
+            nbrs.add(p)
     return nbrs
 
 

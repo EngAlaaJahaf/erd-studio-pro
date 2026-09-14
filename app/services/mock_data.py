@@ -246,6 +246,7 @@ def generate_mock_data(
         "success": True,
         "tableCount": len(sorted_tables),
         "totalRows": total_rows,
+        "topologicalOrder": sorted_tables,
         "script": full_script,
         "dialect": dialect
     }

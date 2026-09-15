@@ -328,11 +328,14 @@ def generate_standalone_html_report(tables_data: Dict[str, Any], fk_list: list,
     """Generate a 100% self-contained, offline interactive HTML report.
 
     Contains:
-    - Embedded full SVG diagram with Pan & Zoom controls.
-    - Click-to-focus and table hover highlighting.
-    - Client-side search and subsystem filtering.
-    - Full Executive Data Dictionary with descriptions and FK links.
-    - Native print layout (@media print) for direct browser PDF export.
+    - Fully draggable and interactive SVG ER diagram with dynamic real-time relation recalculation.
+    - Strict LTR text formatting ensuring column names & types stay strictly inside table boundaries in both RTL & LTR modes.
+    - Theme-aware SVG styling (Dark & Light) synchronized with document theme.
+    - Interactive selection, relationship tracing, and connection highlighting.
+    - Toolbar controls: Zoom (+, -, 1:1), Fit to View, Orthogonal/Curved line mode, Fullscreen toggle, Auto-Layout.
+    - Client-side instant search and subsystem filtering synchronized with canvas & dictionary.
+    - Full Executive Data Dictionary with column details, PK/FK badges, and comments.
+    - Print-ready CSS for direct browser PDF export.
     """
     is_ar = (lang == "ar")
     positions = positions or {}
@@ -344,7 +347,7 @@ def generate_standalone_html_report(tables_data: Dict[str, Any], fk_list: list,
         if t not in positions:
             col = idx % 5
             row = idx // 5
-            positions[t] = {"x": col * 320 + 80, "y": row * 260 + 80, "width": 270, "height": 180}
+            positions[t] = {"x": col * 340 + 60, "y": row * 280 + 60, "width": 280, "height": 180}
             idx += 1
 
     # Format JSON payload safely embedded inside HTML
@@ -358,7 +361,7 @@ def generate_standalone_html_report(tables_data: Dict[str, Any], fk_list: list,
         "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }, ensure_ascii=False)
 
-    title_text = "تقرير المخطط المعماري التفاعلي • TESTR ERD Studio Pro" if is_ar else "Interactive Architecture Report • TESTR ERD Studio Pro"
+    title_text = "تقرير المخطط المعماري التفاعلي • ERD Studio Pro" if is_ar else "Interactive Architecture Report • ERD Studio Pro"
 
     html = f"""<!DOCTYPE html>
 <html lang="{lang}" dir="{'rtl' if is_ar else 'ltr'}" data-theme="{theme}">
@@ -371,31 +374,35 @@ def generate_standalone_html_report(tables_data: Dict[str, Any], fk_list: list,
   --bg: #090d16;
   --bg-card: #111827;
   --bg-card-subtle: #1e293b;
+  --bg-table-node: #111827;
   --border: #334155;
   --border-light: #1e293b;
   --text: #f8fafc;
   --text-muted: #94a3b8;
   --accent: #38bdf8;
-  --accent-glow: rgba(56, 189, 248, 0.15);
+  --accent-glow: rgba(56, 189, 248, 0.25);
   --success: #10b981;
-  --purple: #8b5cf6;
+  --purple: #a78bfa;
   --amber: #f59e0b;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Tahoma, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  --canvas-grid: #1e293b;
 }}
 [data-theme="light"] {{
   --bg: #f8fafc;
   --bg-card: #ffffff;
   --bg-card-subtle: #f1f5f9;
+  --bg-table-node: #ffffff;
   --border: #cbd5e1;
   --border-light: #e2e8f0;
   --text: #0f172a;
   --text-muted: #64748b;
   --accent: #0284c7;
-  --accent-glow: rgba(2, 132, 199, 0.12);
+  --accent-glow: rgba(2, 132, 199, 0.2);
   --success: #059669;
   --purple: #7c3aed;
   --amber: #d97706;
+  --canvas-grid: #e2e8f0;
 }}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -404,6 +411,7 @@ body {{
   color: var(--text);
   line-height: 1.5;
   overflow-x: hidden;
+  transition: background-color 0.2s, color 0.2s;
 }}
 
 /* Top Navigation Bar */
@@ -417,6 +425,7 @@ body {{
   position: sticky;
   top: 0;
   z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }}
 .brand {{
   display: flex;
@@ -426,11 +435,12 @@ body {{
 .brand-badge {{
   background: var(--accent-glow);
   color: var(--accent);
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   border: 1px solid var(--accent);
+  letter-spacing: 0.5px;
 }}
 .brand-title {{
   font-size: 16px;
@@ -449,19 +459,21 @@ body {{
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  transition: all 0.2s;
+  transition: all 0.15s ease;
+  user-select: none;
 }}
 .btn:hover {{
   background: var(--bg-card-subtle);
   border-color: var(--accent);
+  color: var(--accent);
 }}
 .btn.primary {{
   background: var(--accent);
@@ -470,6 +482,12 @@ body {{
 }}
 .btn.primary:hover {{
   filter: brightness(1.1);
+  box-shadow: 0 0 12px var(--accent-glow);
+}}
+.btn.active {{
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
 }}
 
 /* Layout Container */
@@ -495,6 +513,7 @@ body {{
   padding: 14px 18px;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
 }}
 .stat-label {{
   font-size: 12px;
@@ -516,6 +535,21 @@ body {{
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s;
+}}
+.canvas-card.is-fullscreen {{
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 99999 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}}
+.canvas-card.is-fullscreen .canvas-viewport {{
+  height: calc(100vh - 54px) !important;
 }}
 .canvas-toolbar {{
   display: flex;
@@ -531,22 +565,112 @@ body {{
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }}
 .canvas-viewport {{
-  height: 560px;
+  height: 620px;
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle, var(--border-light) 1px, transparent 1px);
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, var(--canvas-grid) 1.2px, transparent 1.2px);
   background-size: 24px 24px;
   cursor: grab;
 }}
-.canvas-viewport:active {{
-  cursor: grabbing;
+.canvas-viewport.is-panning {{
+  cursor: grabbing !important;
 }}
+.canvas-viewport.is-dragging-table {{
+  cursor: grabbing !important;
+}}
+
+/* SVG Viewport & Strict LTR Text Formatting */
 #viewportSvg {{
   width: 100%;
   height: 100%;
   display: block;
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  user-select: none;
+}}
+#viewportSvg * {{
+  direction: ltr !important;
+  unicode-bidi: isolate;
+}}
+#viewportSvg text {{
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}}
+
+/* Table Node in SVG */
+.table-node-svg {{
+  cursor: grab;
+  transition: opacity 0.2s;
+}}
+.table-node-svg.dragging {{
+  cursor: grabbing !important;
+}}
+.table-node-svg:hover .table-rect-bg {{
+  stroke: var(--accent);
+  stroke-width: 2px;
+}}
+.table-node-svg.selected .table-rect-bg {{
+  stroke: var(--accent) !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 10px var(--accent-glow));
+}}
+.table-node-svg.partner .table-rect-bg {{
+  stroke: var(--purple) !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.3));
+}}
+.table-node-svg.dimmed {{
+  opacity: 0.35 !important;
+}}
+
+/* Relationship Lines */
+.rel-line {{
+  transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+  pointer-events: stroke;
+  cursor: pointer;
+}}
+.rel-line:hover {{
+  stroke: var(--accent) !important;
+  stroke-width: 2.5px !important;
+}}
+.rel-line.highlighted {{
+  stroke: var(--accent) !important;
+  stroke-width: 2.5px !important;
+  stroke-dasharray: none !important;
+  opacity: 1 !important;
+}}
+.rel-line.dimmed {{
+  opacity: 0.12 !important;
+}}
+
+/* Canvas Overlay Badge */
+.canvas-hud {{
+  position: absolute;
+  bottom: 14px;
+  right: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  pointer-events: none;
+  font-family: var(--font-mono);
+  z-index: 10;
+}}
+[dir="rtl"] .canvas-hud {{
+  right: auto;
+  left: 16px;
 }}
 
 /* Filter & Search Bar */
@@ -554,26 +678,28 @@ body {{
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }}
 .search-box {{
   flex: 1;
-  min-width: 240px;
+  min-width: 260px;
   position: relative;
 }}
 .search-input {{
   width: 100%;
-  padding: 8px 14px;
+  padding: 9px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
   font-size: 13px;
   outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }}
 .search-input:focus {{
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }}
 .filter-chips {{
   display: flex;
@@ -582,14 +708,15 @@ body {{
   flex-wrap: wrap;
 }}
 .chip {{
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 5px 12px;
+  border-radius: 7px;
   font-size: 11.5px;
   font-weight: 600;
   border: 1px solid var(--border);
   background: var(--bg-card);
+  color: var(--text);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }}
 .chip:hover, .chip.active {{
   background: var(--accent);
@@ -615,10 +742,11 @@ body {{
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }}
 .table-card:hover, .table-card.highlighted {{
   border-color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow);
 }}
 .table-head {{
   display: flex;
@@ -648,7 +776,7 @@ body {{
   color: var(--text-muted);
   font-weight: 700;
   text-align: start;
-  padding: 8px 14px;
+  padding: 9px 14px;
   border-bottom: 1px solid var(--border);
 }}
 .col-table td {{
@@ -666,18 +794,19 @@ body {{
   font-weight: 700;
   font-family: var(--font-mono);
 }}
-.badge.pk {{ background: rgba(124, 58, 237, 0.18); color: #a78bfa; border: 1px solid #7c3aed; }}
-.badge.fk {{ background: rgba(2, 132, 199, 0.18); color: #38bdf8; border: 1px solid #0284c7; }}
+.badge.pk {{ background: rgba(167, 139, 250, 0.18); color: var(--purple); border: 1px solid var(--purple); }}
+.badge.fk {{ background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }}
 
 /* Print Rules */
 @media print {{
-  .report-header, .canvas-toolbar, .filter-bar, .canvas-tools, .canvas-viewport {{
+  .report-header, .canvas-toolbar, .filter-bar, .canvas-tools, .canvas-viewport, .canvas-hud {{
     display: none !important;
   }}
   body {{ background: #fff !important; color: #000 !important; }}
-  .table-card {{ page-break-inside: avoid; border: 1px solid #ccc !important; margin-bottom: 16px; }}
+  .table-card {{ page-break-inside: avoid; border: 1px solid #ccc !important; margin-bottom: 16px; box-shadow: none !important; }}
   .table-head {{ background: #f0f0f0 !important; }}
   .badge.pk {{ color: #000 !important; border: 1px solid #000 !important; }}
+  .badge.fk {{ color: #000 !important; border: 1px solid #000 !important; }}
 }}
 </style>
 </head>
@@ -692,8 +821,8 @@ body {{
     </div>
   </div>
   <div class="header-actions">
-    <button class="btn" onclick="toggleTheme()" title="تبديل المظهر">🌓 <span id="lblTheme">{'فاتح/داكن' if is_ar else 'Theme'}</span></button>
-    <button class="btn primary" onclick="window.print()" title="طباعة أو تصدير PDF">🖨 <span>{'طباعة / PDF' if is_ar else 'Print / PDF'}</span></button>
+    <button class="btn" onclick="toggleTheme()" title="{'تبديل المظهر (فاتح / داكن)' if is_ar else 'Toggle Theme (Light / Dark)'}">🌓 <span id="lblTheme">{'المظهر' if is_ar else 'Theme'}</span></button>
+    <button class="btn primary" onclick="window.print()" title="{'طباعة أو تصدير PDF' if is_ar else 'Print / PDF'}">🖨 <span>{'طباعة / PDF' if is_ar else 'Print / PDF'}</span></button>
   </div>
 </header>
 
@@ -720,26 +849,39 @@ body {{
   </div>
 
   <!-- Interactive SVG Canvas -->
-  <div class="canvas-card">
+  <div class="canvas-card" id="canvasCard">
     <div class="canvas-toolbar">
-      <div style="font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px;">
+      <div style="font-weight:700; font-size:13px; display:flex; align-items:center; gap:8px;">
         <span>🗺</span>
-        <span>{'مخطط الجداول والعلاقات التفاعلي (Interactive Schema Diagram)' if is_ar else 'Interactive ER Diagram'}</span>
+        <span>{'مخطط الجداول والعلاقات التفاعلي (اسحب الجداول لتحريكها بحرية)' if is_ar else 'Interactive ER Diagram (Drag tables freely)'}</span>
       </div>
       <div class="canvas-tools">
-        <button class="btn" onclick="zoomIn()" title="تكبير">+</button>
-        <button class="btn" onclick="resetZoom()" title="ضبط 1:1">1:1</button>
-        <button class="btn" onclick="zoomOut()" title="تصغير">-</button>
-        <button class="btn" onclick="fitView()" title="ملاءمة">⛶ {'ملاءمة' if is_ar else 'Fit'}</button>
+        <button class="btn" onclick="zoomIn()" title="{'تكبير' if is_ar else 'Zoom In'}">🔍+</button>
+        <button class="btn" onclick="resetZoom()" title="{'ضبط 1:1' if is_ar else 'Reset 1:1'}">1:1</button>
+        <button class="btn" onclick="zoomOut()" title="{'تصغير' if is_ar else 'Zoom Out'}">🔍-</button>
+        <button class="btn" onclick="fitView()" title="{'ملاءمة المخطط بالكامل داخل الشاشة' if is_ar else 'Fit all tables into viewport'}">⛶ {'ملاءمة' if is_ar else 'Fit'}</button>
+        <button class="btn" id="btnLineStyle" onclick="toggleLineRouting()" title="{'تبديل نمط الخطوط (منحني / متعامد)' if is_ar else 'Toggle line routing style'}">🔀 <span id="lblLineStyle">{'منحني' if is_ar else 'Curved'}</span></button>
+        <button class="btn" onclick="autoLayoutTables()" title="{'إعادة ترتيب الجداول تلقائياً' if is_ar else 'Auto-arrange tables grid'}">🔄 {'ترتيب تلقائي' if is_ar else 'Auto-Layout'}</button>
+        <button class="btn" id="btnFullscreen" onclick="toggleFullscreen()" title="{'ملء الشاشة' if is_ar else 'Toggle Fullscreen'}">⛶ {'ملء الشاشة' if is_ar else 'Fullscreen'}</button>
       </div>
     </div>
     <div class="canvas-viewport" id="viewport">
-      <svg id="viewportSvg" viewBox="0 0 2400 1600">
-        <g id="scene">
+      <svg id="viewportSvg" direction="ltr" style="direction: ltr !important;">
+        <defs>
+          <marker id="relArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b" id="arrowPath" />
+          </marker>
+        </defs>
+        <g id="scene" direction="ltr" style="direction: ltr !important;">
           <g id="relationsGroup"></g>
           <g id="tablesGroup"></g>
         </g>
       </svg>
+      <div class="canvas-hud" id="canvasHud">
+        <span>{'تكبير:' if is_ar else 'Zoom:'} <b id="hudZoom">85%</b></span>
+        <span>•</span>
+        <span>{'الجداول:' if is_ar else 'Tables:'} <b id="hudTables">{len(tables_data)}</b></span>
+      </div>
     </div>
   </div>
 
@@ -749,7 +891,7 @@ body {{
       <input type="text" id="searchInput" class="search-input" placeholder="{'بحث فوري في الجداول والحقول والشروحات...' if is_ar else 'Instant search across tables and attributes...'}" oninput="handleSearch(this.value)">
     </div>
     <div class="filter-chips" id="chipsContainer">
-      <button class="chip active" onclick="filterSubsystem('all')">{'الكل' if is_ar else 'All'} ({len(tables_data)})</button>
+      <button class="chip active" onclick="filterSubsystem('all', this)">{'الكل' if is_ar else 'All'} ({len(tables_data)})</button>
     </div>
   </div>
 
@@ -768,13 +910,27 @@ body {{
 // --- Embedded Self-Contained Model ---
 const MODEL = {schema_payload_json};
 
+const TABLE_WIDTH = 280;
+const HEADER_HEIGHT = 36;
+const ROW_HEIGHT = 22;
+
 let zoom = 0.85;
-let panX = 40;
-let panY = 40;
-let isDragging = false;
-let startX = 0, startY = 0;
+let panX = 60;
+let panY = 60;
+let isPanning = false;
+let panStartX = 0, panStartY = 0;
+
+// Dragging table variables
+let draggedTable = null;
+let isTableDragging = false;
+let dragOffsetX = 0, dragOffsetY = 0;
+let dragStartClientX = 0, dragStartClientY = 0;
+let hasTableMoved = false;
+
+let selectedTable = null;
 let activeFilter = 'all';
-let highlightedTable = null;
+let lineRoutingMode = 'bezier'; // 'bezier' or 'orthogonal'
+let isFullscreen = false;
 
 const viewport = document.getElementById('viewport');
 const scene = document.getElementById('scene');
@@ -782,42 +938,265 @@ const tablesGroup = document.getElementById('tablesGroup');
 const relationsGroup = document.getElementById('relationsGroup');
 const dictList = document.getElementById('dictList');
 const chipsContainer = document.getElementById('chipsContainer');
+const canvasCard = document.getElementById('canvasCard');
+const hudZoom = document.getElementById('hudZoom');
+const hudTables = document.getElementById('hudTables');
 
 function updateTransform() {{
   scene.setAttribute('transform', `translate(${{panX}}, ${{panY}}) scale(${{zoom}})`);
+  if (hudZoom) hudZoom.textContent = `${{Math.round(zoom * 100)}}%`;
 }}
 
-function zoomIn() {{ zoom *= 1.2; updateTransform(); }}
-function zoomOut() {{ zoom *= 0.8; updateTransform(); }}
-function resetZoom() {{ zoom = 1.0; panX = 40; panY = 40; updateTransform(); }}
-function fitView() {{
-  zoom = 0.75; panX = 60; panY = 40; updateTransform();
+function zoomIn() {{
+  const cx = viewport.clientWidth / 2;
+  const cy = viewport.clientHeight / 2;
+  zoomAtPoint(cx, cy, 1.2);
 }}
 
-viewport.addEventListener('mousedown', e => {{
-  if (e.target.closest('.table-node-svg')) return;
-  isDragging = true;
-  startX = e.clientX - panX;
-  startY = e.clientY - panY;
-}});
-window.addEventListener('mousemove', e => {{
-  if (!isDragging) return;
-  panX = e.clientX - startX;
-  panY = e.clientY - startY;
+function zoomOut() {{
+  const cx = viewport.clientWidth / 2;
+  const cy = viewport.clientHeight / 2;
+  zoomAtPoint(cx, cy, 0.8);
+}}
+
+function resetZoom() {{
+  zoom = 1.0;
+  panX = 60;
+  panY = 60;
   updateTransform();
+}}
+
+function zoomAtPoint(screenX, screenY, factor) {{
+  const oldZoom = zoom;
+  const newZoom = Math.min(Math.max(zoom * factor, 0.15), 3.0);
+  if (newZoom === oldZoom) return;
+
+  const worldX = (screenX - panX) / oldZoom;
+  const worldY = (screenY - panY) / oldZoom;
+
+  zoom = newZoom;
+  panX = screenX - worldX * zoom;
+  panY = screenY - worldY * zoom;
+  updateTransform();
+}}
+
+// Dynamic bounding-box Fit to View
+function fitView() {{
+  const visibleTables = Object.keys(MODEL.tablesData).filter(t => {{
+    const node = document.getElementById(`svg-node-${{t}}`);
+    return node && node.style.display !== 'none';
+  }});
+  if (!visibleTables.length) return;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  visibleTables.forEach(t => {{
+    const p = MODEL.positions[t] || {{ x: 60, y: 60, width: TABLE_WIDTH, height: 180 }};
+    const cols = (MODEL.tablesData[t] && MODEL.tablesData[t].columns) ? MODEL.tablesData[t].columns.length : 4;
+    const h = HEADER_HEIGHT + Math.min(cols, 12) * ROW_HEIGHT + 14;
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + TABLE_WIDTH);
+    maxY = Math.max(maxY, p.y + h);
+  }});
+
+  const vpW = viewport.clientWidth || 1200;
+  const vpH = viewport.clientHeight || 600;
+  const contentW = Math.max(maxX - minX + 140, 300);
+  const contentH = Math.max(maxY - minY + 140, 300);
+
+  const scaleX = vpW / contentW;
+  const scaleY = vpH / contentH;
+  zoom = Math.min(Math.max(Math.min(scaleX, scaleY), 0.2), 1.25);
+
+  const midX = (minX + maxX) / 2;
+  const midY = (minY + maxY) / 2;
+  panX = vpW / 2 - midX * zoom;
+  panY = vpH / 2 - midY * zoom;
+
+  updateTransform();
+}}
+
+function toggleFullscreen() {{
+  isFullscreen = !isFullscreen;
+  if (isFullscreen) {{
+    canvasCard.classList.add('is-fullscreen');
+    document.getElementById('btnFullscreen').innerHTML = "⛶ " + (MODEL.lang === 'ar' ? 'تصغير' : 'Exit');
+  }} else {{
+    canvasCard.classList.remove('is-fullscreen');
+    document.getElementById('btnFullscreen').innerHTML = "⛶ " + (MODEL.lang === 'ar' ? 'ملء الشاشة' : 'Fullscreen');
+  }}
+  setTimeout(fitView, 60);
+}}
+
+window.addEventListener('keydown', e => {{
+  if (e.key === 'Escape' && isFullscreen) {{
+    toggleFullscreen();
+  }}
 }});
-window.addEventListener('mouseup', () => {{ isDragging = false; }});
+
+function toggleLineRouting() {{
+  lineRoutingMode = (lineRoutingMode === 'bezier' ? 'orthogonal' : 'bezier');
+  const lbl = document.getElementById('lblLineStyle');
+  if (lbl) lbl.textContent = (lineRoutingMode === 'bezier' ? (MODEL.lang === 'ar' ? 'منحني' : 'Curved') : (MODEL.lang === 'ar' ? 'متعامد' : 'Orthogonal'));
+  updateRelationLines();
+}}
+
+function autoLayoutTables() {{
+  const visible = Object.keys(MODEL.tablesData).filter(t => {{
+    const node = document.getElementById(`svg-node-${{t}}`);
+    return node && node.style.display !== 'none';
+  }});
+  const colsCount = Math.max(Math.ceil(Math.sqrt(visible.length * 1.5)), 3);
+  visible.forEach((tname, i) => {{
+    const col = i % colsCount;
+    const row = Math.floor(i / colsCount);
+    MODEL.positions[tname] = {{
+      x: col * 330 + 80,
+      y: row * 300 + 80,
+      width: TABLE_WIDTH
+    }};
+    const node = document.getElementById(`svg-node-${{tname}}`);
+    if (node) {{
+      node.setAttribute('transform', `translate(${{MODEL.positions[tname].x}}, ${{MODEL.positions[tname].y}})`);
+    }}
+  }});
+  updateRelationLines();
+  fitView();
+}}
+
+// Viewport Canvas Panning
+viewport.addEventListener('mousedown', e => {{
+  if (e.button !== 0) return;
+  if (e.target.closest('.table-node-svg')) return; // Table drag handled separately
+
+  isPanning = true;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  viewport.classList.add('is-panning');
+
+  // Deselect on empty canvas click
+  clearSelection();
+}});
+
+window.addEventListener('mousemove', e => {{
+  if (isPanning) {{
+    panX = e.clientX - panStartX;
+    panY = e.clientY - panStartY;
+    updateTransform();
+    return;
+  }}
+
+  if (isTableDragging && draggedTable) {{
+    const dx = Math.abs(e.clientX - dragStartClientX);
+    const dy = Math.abs(e.clientY - dragStartClientY);
+    if (dx > 3 || dy > 3) hasTableMoved = true;
+
+    const vpRect = viewport.getBoundingClientRect();
+    const worldX = (e.clientX - vpRect.left - panX) / zoom;
+    const worldY = (e.clientY - vpRect.top - panY) / zoom;
+
+    const pos = MODEL.positions[draggedTable];
+    pos.x = Math.round(worldX - dragOffsetX);
+    pos.y = Math.round(worldY - dragOffsetY);
+
+    const node = document.getElementById(`svg-node-${{draggedTable}}`);
+    if (node) {{
+      node.setAttribute('transform', `translate(${{pos.x}}, ${{pos.y}})`);
+    }}
+
+    // Real-time update connected lines
+    updateRelationLines(draggedTable);
+  }}
+}});
+
+window.addEventListener('mouseup', () => {{
+  if (isPanning) {{
+    isPanning = false;
+    viewport.classList.remove('is-panning');
+  }}
+
+  if (isTableDragging && draggedTable) {{
+    const node = document.getElementById(`svg-node-${{draggedTable}}`);
+    if (node) node.classList.remove('dragging');
+    viewport.classList.remove('is-dragging-table');
+
+    if (!hasTableMoved) {{
+      // Simple click without drag -> Select & Focus
+      selectAndFocusTable(draggedTable);
+    }}
+
+    isTableDragging = false;
+    draggedTable = null;
+  }}
+}});
+
+// Zoom on mouse wheel centered at pointer
 viewport.addEventListener('wheel', e => {{
   e.preventDefault();
-  const factor = e.deltaY < 0 ? 1.1 : 0.9;
-  zoom *= factor;
-  updateTransform();
+  const factor = e.deltaY < 0 ? 1.12 : 0.89;
+  const rect = viewport.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  zoomAtPoint(mouseX, mouseY, factor);
 }}, {{ passive: false }});
 
 function toggleTheme() {{
   const cur = document.documentElement.getAttribute('data-theme') || 'dark';
   const next = cur === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
+}}
+
+// Calculate Smart Routing Line Path
+function calculateLinePath(cp, pp, mode) {{
+  const cw = TABLE_WIDTH;
+  const pw = TABLE_WIDTH;
+  const ch = cp.height || 180;
+  const ph = pp.height || 180;
+
+  let x1, y1, x2, y2;
+  if (cp.x + cw < pp.x - 20) {{
+    // Child is left of Parent
+    x1 = cp.x + cw;
+    y1 = cp.y + 42;
+    x2 = pp.x;
+    y2 = pp.y + 42;
+  }} else if (pp.x + pw < cp.x - 20) {{
+    // Child is right of Parent
+    x1 = cp.x;
+    y1 = cp.y + 42;
+    x2 = pp.x + pw;
+    y2 = pp.y + 42;
+  }} else {{
+    // Vertically stacked or overlapping horizontally
+    x1 = cp.x + cw / 2;
+    y1 = (cp.y < pp.y) ? (cp.y + ch) : cp.y;
+    x2 = pp.x + pw / 2;
+    y2 = (cp.y < pp.y) ? pp.y : (pp.y + ph);
+  }}
+
+  if (mode === 'orthogonal') {{
+    const midX = (x1 + x2) / 2;
+    return `M ${{x1}} ${{y1}} L ${{midX}} ${{y1}} L ${{midX}} ${{y2}} L ${{x2}} ${{y2}}`;
+  }} else {{
+    const dx = Math.max(Math.abs(x2 - x1) * 0.45, 40);
+    const c1x = x1 + (x2 >= x1 ? dx : -dx);
+    const c2x = x2 - (x2 >= x1 ? dx : -dx);
+    return `M ${{x1}} ${{y1}} C ${{c1x}} ${{y1}}, ${{c2x}} ${{y2}}, ${{x2}} ${{y2}}`;
+  }}
+}}
+
+// Real-time Update of Relation Lines
+function updateRelationLines(tableFilter) {{
+  MODEL.fkList.forEach((f, idx) => {{
+    if (tableFilter && f.child !== tableFilter && f.parent !== tableFilter) return;
+    const cp = MODEL.positions[f.child];
+    const pp = MODEL.positions[f.parent];
+    if (!cp || !pp) return;
+    const path = document.getElementById(`rel-path-${{idx}}`);
+    if (path) {{
+      path.setAttribute('d', calculateLinePath(cp, pp, lineRoutingMode));
+    }}
+  }});
 }}
 
 // Draw SVG Tables & Relations
@@ -827,116 +1206,245 @@ function renderDiagram() {{
 
   const {{ tablesData, fkList, positions }} = MODEL;
 
-  // Draw Relationships (Orthogonal bezier lines)
-  fkList.forEach(f => {{
+  // Draw Foreign Key Lines
+  fkList.forEach((f, idx) => {{
     const cp = positions[f.child];
     const pp = positions[f.parent];
     if (!cp || !pp) return;
-    const x1 = cp.x + 135;
-    const y1 = cp.y + 20;
-    const x2 = pp.x + 135;
-    const y2 = pp.y + 20;
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const dx = Math.abs(x2 - x1) * 0.4;
-    const d = `M ${{x1}} ${{y1}} C ${{x1 + (x2 > x1 ? dx : -dx)}} ${{y1}}, ${{x2 - (x2 > x1 ? dx : -dx)}} ${{y2}}, ${{x2}} ${{y2}}`;
-    path.setAttribute('d', d);
+    path.setAttribute('id', `rel-path-${{idx}}`);
+    path.setAttribute('d', calculateLinePath(cp, pp, lineRoutingMode));
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', '#64748b');
     path.setAttribute('stroke-width', '1.8');
     path.setAttribute('stroke-dasharray', '4 3');
     path.setAttribute('class', `rel-line rel-${{f.child}} rel-${{f.parent}}`);
+    path.setAttribute('marker-end', 'url(#relArrow)');
+
+    const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    titleEl.textContent = `${{f.child}} -> ${{f.parent}} (${{f.cols || ''}})`;
+    path.appendChild(titleEl);
+
     relationsGroup.appendChild(path);
   }});
 
-  // Draw Tables
+  // Draw Interactive Tables
   Object.keys(tablesData).forEach(tname => {{
     const data = tablesData[tname];
-    const pos = positions[tname] || {{ x: 100, y: 100, width: 270, height: 160 }};
+    const pos = positions[tname] || {{ x: 80, y: 80 }};
     const cols = data.columns || [];
     const pks = data.pks || [];
+
+    const visibleCols = cols.slice(0, 11);
+    const extraCols = cols.length - visibleCols.length;
+    const cardHeight = HEADER_HEIGHT + visibleCols.length * ROW_HEIGHT + (extraCols > 0 ? 28 : 10);
+    pos.width = TABLE_WIDTH;
+    pos.height = cardHeight;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'table-node-svg');
     g.setAttribute('id', `svg-node-${{tname}}`);
+    g.setAttribute('direction', 'ltr');
     g.setAttribute('transform', `translate(${{pos.x}}, ${{pos.y}})`);
-    g.style.cursor = 'pointer';
-    g.onclick = () => focusTable(tname);
+    g.style.direction = 'ltr';
 
-    // Box
-    const h = 32 + Math.min(cols.length, 12) * 22;
+    // Mousedown for Table Dragging
+    g.addEventListener('mousedown', e => {{
+      if (e.button !== 0) return;
+      e.stopPropagation();
+
+      draggedTable = tname;
+      isTableDragging = true;
+      hasTableMoved = false;
+      dragStartClientX = e.clientX;
+      dragStartClientY = e.clientY;
+
+      const vpRect = viewport.getBoundingClientRect();
+      const worldX = (e.clientX - vpRect.left - panX) / zoom;
+      const worldY = (e.clientY - vpRect.top - panY) / zoom;
+      dragOffsetX = worldX - pos.x;
+      dragOffsetY = worldY - pos.y;
+
+      g.classList.add('dragging');
+      viewport.classList.add('is-dragging-table');
+
+      // Bring table to front in SVG
+      tablesGroup.appendChild(g);
+    }});
+
+    // Table Card Body Rect
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('width', 270);
-    rect.setAttribute('height', h);
-    rect.setAttribute('rx', '8');
-    rect.setAttribute('fill', '#111827');
-    rect.setAttribute('stroke', '#334155');
+    rect.setAttribute('class', 'table-rect-bg');
+    rect.setAttribute('width', TABLE_WIDTH);
+    rect.setAttribute('height', cardHeight);
+    rect.setAttribute('rx', '9');
+    rect.setAttribute('fill', 'var(--bg-table-node)');
+    rect.setAttribute('stroke', 'var(--border)');
     rect.setAttribute('stroke-width', '1.5');
     rect.setAttribute('id', `rect-${{tname}}`);
     g.appendChild(rect);
 
-    // Title Rect
+    // Table Header Rect
     const titleRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    titleRect.setAttribute('width', 270);
-    titleRect.setAttribute('height', '32');
-    titleRect.setAttribute('rx', '8');
-    titleRect.setAttribute('fill', '#1e293b');
+    titleRect.setAttribute('width', TABLE_WIDTH);
+    titleRect.setAttribute('height', HEADER_HEIGHT);
+    titleRect.setAttribute('rx', '9');
+    titleRect.setAttribute('fill', 'var(--bg-card-subtle)');
+    titleRect.setAttribute('stroke', 'var(--border)');
+    titleRect.setAttribute('stroke-width', '1');
     g.appendChild(titleRect);
 
-    // Title Text
+    // Cover bottom corners of header rect
+    const headerPatch = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    headerPatch.setAttribute('x', '0');
+    headerPatch.setAttribute('y', HEADER_HEIGHT - 6);
+    headerPatch.setAttribute('width', TABLE_WIDTH);
+    headerPatch.setAttribute('height', '6');
+    headerPatch.setAttribute('fill', 'var(--bg-card-subtle)');
+    g.appendChild(headerPatch);
+
+    // Table Header Title Text (Centered, strict LTR)
     const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    txt.setAttribute('x', '135');
-    txt.setAttribute('y', '20');
+    txt.setAttribute('x', TABLE_WIDTH / 2);
+    txt.setAttribute('y', 23);
     txt.setAttribute('text-anchor', 'middle');
-    txt.setAttribute('fill', '#38bdf8');
-    txt.setAttribute('font-family', 'ui-monospace, monospace');
+    txt.setAttribute('direction', 'ltr');
+    txt.setAttribute('fill', 'var(--accent)');
+    txt.setAttribute('font-family', 'var(--font-mono)');
     txt.setAttribute('font-size', '12');
-    txt.setAttribute('font-weight', 'bold');
-    txt.textContent = tname;
+    txt.setAttribute('font-weight', '700');
+    txt.style.direction = 'ltr';
+    txt.textContent = tname.length > 25 ? tname.slice(0, 24) + '…' : tname;
+    const titleTip = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    titleTip.textContent = tname;
+    txt.appendChild(titleTip);
     g.appendChild(txt);
 
-    // Columns sample
-    cols.slice(0, 10).forEach((col, ci) => {{
-      const cy = 48 + ci * 20;
+    // Columns sample (Strict LTR text-anchor to avoid RTL flip)
+    visibleCols.forEach((col, ci) => {{
+      const cy = HEADER_HEIGHT + 17 + ci * ROW_HEIGHT;
       const isPk = pks.includes(col.name);
+      const isFk = fkList.some(f => f.child === tname && (f.cols || '').toLowerCase() === col.name.toLowerCase());
 
+      // Column Name (Anchored strictly to left at x=16)
       const colTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      colTxt.setAttribute('x', '14');
+      colTxt.setAttribute('x', '16');
       colTxt.setAttribute('y', cy);
-      colTxt.setAttribute('fill', isPk ? '#a78bfa' : '#cbd5e1');
+      colTxt.setAttribute('text-anchor', 'start');
+      colTxt.setAttribute('direction', 'ltr');
+      colTxt.setAttribute('fill', isPk ? 'var(--purple)' : 'var(--text)');
       colTxt.setAttribute('font-size', '11');
-      colTxt.setAttribute('font-family', 'ui-monospace, monospace');
-      colTxt.textContent = (isPk ? '🔑 ' : '') + col.name;
+      colTxt.setAttribute('font-family', 'var(--font-mono)');
+      if (isPk) colTxt.setAttribute('font-weight', '700');
+      colTxt.style.direction = 'ltr';
+      colTxt.style.unicodeBidi = 'isolate';
+
+      const prefix = isPk ? '🔑 ' : (isFk ? '🔗 ' : '');
+      const rawName = col.name;
+      const displayName = rawName.length > 17 ? rawName.slice(0, 16) + '…' : rawName;
+      colTxt.textContent = prefix + displayName;
+
+      const colTip = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      colTip.textContent = `${{rawName}} (${{col.type || 'UNKNOWN'}})`;
+      colTxt.appendChild(colTip);
       g.appendChild(colTxt);
 
+      // Data Type (Anchored strictly to right at x=264)
       const typeTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      typeTxt.setAttribute('x', '256');
+      typeTxt.setAttribute('x', '264');
       typeTxt.setAttribute('y', cy);
       typeTxt.setAttribute('text-anchor', 'end');
-      typeTxt.setAttribute('fill', '#64748b');
+      typeTxt.setAttribute('direction', 'ltr');
+      typeTxt.setAttribute('fill', 'var(--text-muted)');
       typeTxt.setAttribute('font-size', '10');
-      typeTxt.textContent = col.type || '';
+      typeTxt.setAttribute('font-family', 'var(--font-mono)');
+      typeTxt.style.direction = 'ltr';
+      typeTxt.style.unicodeBidi = 'isolate';
+
+      const rawType = col.type || '';
+      const displayType = rawType.length > 13 ? rawType.slice(0, 12) + '…' : rawType;
+      typeTxt.textContent = displayType;
       g.appendChild(typeTxt);
     }});
+
+    // Extra columns indicator if more than 11 columns
+    if (extraCols > 0) {{
+      const moreTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      moreTxt.setAttribute('x', TABLE_WIDTH / 2);
+      moreTxt.setAttribute('y', cardHeight - 8);
+      moreTxt.setAttribute('text-anchor', 'middle');
+      moreTxt.setAttribute('direction', 'ltr');
+      moreTxt.setAttribute('fill', 'var(--text-muted)');
+      moreTxt.setAttribute('font-size', '10.5');
+      moreTxt.setAttribute('font-style', 'italic');
+      moreTxt.style.direction = 'ltr';
+      moreTxt.textContent = (MODEL.lang === 'ar') ? `+ ${{extraCols}} حقول أخرى...` : `+ ${{extraCols}} more columns...`;
+      g.appendChild(moreTxt);
+    }}
 
     tablesGroup.appendChild(g);
   }});
 }}
 
-// Focus & Highlight Table
-function focusTable(tname) {{
-  highlightedTable = tname;
+// Select & Focus Table with visual relationship isolation
+function selectAndFocusTable(tname) {{
+  selectedTable = tname;
+
+  // Highlight in SVG
+  document.querySelectorAll('.table-node-svg').forEach(n => {{
+    n.classList.remove('selected', 'partner', 'dimmed');
+  }});
+  document.querySelectorAll('.rel-line').forEach(l => {{
+    l.classList.remove('highlighted', 'dimmed');
+  }});
+
+  const selectedNode = document.getElementById(`svg-node-${{tname}}`);
+  if (selectedNode) selectedNode.classList.add('selected');
+
+  // Identify connected relations and partner tables
+  const connectedPartners = new Set();
+  MODEL.fkList.forEach((f, idx) => {{
+    const line = document.getElementById(`rel-path-${{idx}}`);
+    if (!line) return;
+    if (f.child === tname || f.parent === tname) {{
+      line.classList.add('highlighted');
+      connectedPartners.add(f.child === tname ? f.parent : f.child);
+    }} else {{
+      line.classList.add('dimmed');
+    }}
+  }});
+
+  // Highlight partners and dim unrelated tables
+  Object.keys(MODEL.tablesData).forEach(t => {{
+    if (t === tname) return;
+    const node = document.getElementById(`svg-node-${{t}}`);
+    if (!node) return;
+    if (connectedPartners.has(t)) {{
+      node.classList.add('partner');
+    }} else {{
+      node.classList.add('dimmed');
+    }}
+  }});
+
+  // Scroll to Data Dictionary Card
   document.querySelectorAll('.table-card').forEach(c => c.classList.remove('highlighted'));
   const card = document.getElementById(`card-${{tname}}`);
   if (card) {{
     card.classList.add('highlighted');
-    card.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+    card.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
   }}
+}}
 
-  // Highlight in SVG
-  document.querySelectorAll('.table-node-svg rect').forEach(r => r.setAttribute('stroke', '#334155'));
-  const r = document.getElementById(`rect-${{tname}}`);
-  if (r) r.setAttribute('stroke', '#38bdf8');
+function clearSelection() {{
+  selectedTable = null;
+  document.querySelectorAll('.table-node-svg').forEach(n => {{
+    n.classList.remove('selected', 'partner', 'dimmed');
+  }});
+  document.querySelectorAll('.rel-line').forEach(l => {{
+    l.classList.remove('highlighted', 'dimmed');
+  }});
+  document.querySelectorAll('.table-card').forEach(c => c.classList.remove('highlighted'));
 }}
 
 // Render Data Dictionary Cards
@@ -975,7 +1483,7 @@ function renderDictionary() {{
           <div class="table-name">${{tname}}</div>
           <div class="table-desc">${{tCmt || 'جدول في قاعدة البيانات'}}</div>
         </div>
-        <button class="btn" onclick="focusTable('${{tname}}')">🔍 تركيز</button>
+        <button class="btn" onclick="focusAndPanToTable('${{tname}}')">🎯 {'عرض في المخطط' if is_ar else 'View in Diagram'}</button>
       </div>
       <table class="col-table">
         <thead>
@@ -996,6 +1504,22 @@ function renderDictionary() {{
     `;
     dictList.appendChild(card);
   }});
+}}
+
+// Center canvas on table
+function focusAndPanToTable(tname) {{
+  selectAndFocusTable(tname);
+  const pos = MODEL.positions[tname];
+  if (!pos) return;
+
+  const vpW = viewport.clientWidth;
+  const vpH = viewport.clientHeight;
+  panX = vpW / 2 - (pos.x + TABLE_WIDTH / 2) * zoom;
+  panY = vpH / 2 - (pos.y + (pos.height || 180) / 2) * zoom;
+  updateTransform();
+
+  // Smooth scroll canvas into view
+  canvasCard.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
 }}
 
 // Render Subsystems Chips
@@ -1022,31 +1546,61 @@ function filterSubsystem(key, btnElem) {{
   const mapping = (MODEL.subsystems && MODEL.subsystems.mapping) ? MODEL.subsystems.mapping : {{}};
   const {{ tablesData }} = MODEL;
 
+  let visibleCount = 0;
   Object.keys(tablesData).forEach(tname => {{
     const card = document.getElementById(`card-${{tname}}`);
     const svgNode = document.getElementById(`svg-node-${{tname}}`);
     const match = (key === 'all') || (mapping[tname] === key);
     if (card) card.style.display = match ? 'block' : 'none';
     if (svgNode) svgNode.style.display = match ? 'block' : 'none';
+    if (match) visibleCount++;
   }});
+
+  // Update relations visibility
+  MODEL.fkList.forEach((f, idx) => {{
+    const line = document.getElementById(`rel-path-${{idx}}`);
+    if (!line) return;
+    const cMatch = (key === 'all') || (mapping[f.child] === key);
+    const pMatch = (key === 'all') || (mapping[f.parent] === key);
+    line.style.display = (cMatch && pMatch) ? 'block' : 'none';
+  }});
+
+  if (hudTables) hudTables.textContent = visibleCount;
+  fitView();
 }}
 
 // Search Filter
 function handleSearch(q) {{
   const query = q.toLowerCase().trim();
   const {{ tablesData }} = MODEL;
+  let visibleCount = 0;
+
   Object.keys(tablesData).forEach(tname => {{
     const card = document.getElementById(`card-${{tname}}`);
     const svgNode = document.getElementById(`svg-node-${{tname}}`);
     const match = !query || tname.toLowerCase().includes(query) || (card && card.textContent.toLowerCase().includes(query));
     if (card) card.style.display = match ? 'block' : 'none';
     if (svgNode) svgNode.style.display = match ? 'block' : 'none';
+    if (match) visibleCount++;
   }});
+
+  // Update relations visibility
+  MODEL.fkList.forEach((f, idx) => {{
+    const line = document.getElementById(`rel-path-${{idx}}`);
+    if (!line) return;
+    const cMatch = !query || f.child.toLowerCase().includes(query);
+    const pMatch = !query || f.parent.toLowerCase().includes(query);
+    line.style.display = (cMatch && pMatch) ? 'block' : 'none';
+  }});
+
+  if (hudTables) hudTables.textContent = visibleCount;
 }}
 
+// Initialize
 renderDiagram();
 renderDictionary();
 renderSubsystemChips();
+fitView();
 </script>
 </body>
 </html>"""

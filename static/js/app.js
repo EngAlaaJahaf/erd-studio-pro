@@ -1112,7 +1112,10 @@ function renderWsBar() {
   workspaces.forEach(function(w) {
     var tab = document.createElement('div');
     tab.className = 'ws-tab' + (w.id === activeWorkspaceId ? ' active' : '');
-    tab.onclick = function() { activateWorkspace(w.id); };
+    tab.onclick = function() {
+      activateWorkspace(w.id);
+      if (currentView !== 'canvas') switchView('canvas');
+    };
     var icon = document.createElement('span'); icon.className = 'ws-tab-icon'; icon.innerHTML = WS_ICONS[w.source] || '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
     var nm = document.createElement('span'); nm.className = 'ws-tab-name'; nm.textContent = w.name || '—';
     nm.title = w.name;
@@ -1179,7 +1182,11 @@ function renderWsBar() {
   bar.appendChild(quickActions);
 }
 function activateWorkspace(id) {
-  if (id === activeWorkspaceId || !workspaces.length) return;
+  if (!workspaces.length) return;
+  if (id === activeWorkspaceId) {
+    if (currentView !== 'canvas') switchView('canvas');
+    return;
+  }
   var target = workspaces.find(function(w) { return w.id === id; });
   if (!target) return;
   var current = workspaces.find(function(w) { return w.id === activeWorkspaceId; });
@@ -1188,7 +1195,11 @@ function activateWorkspace(id) {
   try { localStorage.setItem('erd_active_workspace_id', String(id)); } catch(e) {}
   _applyWorkspaceToGlobal(target);
   buildSidebarList(); updateSubsysFilterOptions(); renderLegend(); renderAll();
-  if (target.panX != null && target.panY != null) {
+  var hasSavedPos = (target.panX != null && target.panY != null);
+  if (currentView !== 'canvas') {
+    switchView('canvas', hasSavedPos);
+  }
+  if (hasSavedPos) {
     updateCanvasTransform();
   } else {
     setTimeout(fitView, 60);
@@ -1208,6 +1219,7 @@ function closeWorkspace(id) {
     activeWorkspaceId = resetWs.id;
     _applyWorkspaceToGlobal(resetWs);
     buildSidebarList(); updateSubsysFilterOptions(); renderLegend(); renderAll();
+    if (currentView !== 'canvas') switchView('canvas');
     setTimeout(fitView, 60);
     _saveWorkspacesLocal();
     renderWsBar();
@@ -1223,6 +1235,7 @@ function closeWorkspace(id) {
     _applyWorkspaceToGlobal(next);
     activeWorkspaceId = next.id;
     buildSidebarList(); updateSubsysFilterOptions(); renderLegend(); renderAll();
+    if (currentView !== 'canvas') switchView('canvas');
     setTimeout(fitView, 60);
   }
   _saveWorkspacesLocal();
@@ -1594,6 +1607,18 @@ function applyLanguage(lang) {
     if (legendsFlyoutTitle) legendsFlyoutTitle.textContent = isAr ? 'مفاتيح الرموز والأنظمة الفرعية' : 'Legends & Subsystems';
     const spotlightBtnText = document.getElementById('i18n-spotlightBtn');
     if (spotlightBtnText) spotlightBtnText.textContent = isAr ? 'بحث سريع في الجداول والحقول...' : 'Quick search tables & columns...';
+    const hintsTitleEl = document.getElementById('i18n-hintsTitle');
+    if (hintsTitleEl) hintsTitleEl.textContent = isAr ? 'اختصارات التحكم بالكانفاس' : 'Canvas Controls & Shortcuts';
+    setText('i18n-hintRowMarquee', isAr ? 'تحديد متعدد للجداول (Marquee Box)' : 'Multi-select tables (Marquee Box)');
+    setText('i18n-hintRowDrag', isAr ? 'تحريك الجدول أو المجموعة المحددة' : 'Pan table or selected group');
+    setText('i18n-hintRowZoom', isAr ? 'تقريب وتصغير الكانفاس (Zoom)' : 'Zoom in / out on canvas');
+    setText('i18n-hintRowSpotlight', isAr ? 'البحث الشامل والمساعد الذكي' : 'Global search & AI assistant');
+    setText('i18n-hintRowUndo', isAr ? 'التراجع عن أي حركة (Undo)' : 'Undo recent canvas changes');
+    setText('i18n-hintRowRedo', isAr ? 'إعادة الحركة (Redo)' : 'Redo undone action');
+    setText('i18n-hintRowSidebar', isAr ? 'طي / فتح القائمة الجانبية (Sidebar)' : 'Toggle sidebar panel');
+    setText('i18n-keyDragTable', isAr ? 'سحب الجدول' : 'Drag Table');
+    setText('i18n-keyMouseWheel', isAr ? 'عجلة الفأرة' : 'Mouse Wheel');
+    setText('i18n-keyMouseDrag', isAr ? 'سحب بالفأرة' : 'Drag Mouse');
     if (typeof updateRoutingModeUI === 'function') updateRoutingModeUI();
     if (typeof renderSubsystemClusters === 'function') renderSubsystemClusters();
     if (document.getElementById('i18n-pasteModalTitle') && t.pasteModalTitle) document.getElementById('i18n-pasteModalTitle').textContent = t.pasteModalTitle;
@@ -1779,7 +1804,7 @@ function toggleSidebar() {
 
 // ---- APP VIEW NAVIGATION (Diagram / Import / Export) ----
 let currentView = 'canvas';
-function switchView(name) {
+function switchView(name, skipFit) {
   currentView = name;
   ['canvas', 'import', 'export', 'audit'].forEach(v => {
     const sec = document.getElementById('view-' + v);
@@ -1793,7 +1818,9 @@ function switchView(name) {
     if (railBtn) railBtn.classList.toggle('active', v === name);
   });
   if (name === 'canvas') {
-    setTimeout(fitView, 80);
+    if (!skipFit) {
+      setTimeout(fitView, 80);
+    }
   } else if (name === 'audit') {
     if (typeof populateDiffSelectors === 'function') populateDiffSelectors();
   }
@@ -1864,7 +1891,10 @@ function buildSidebarList() {
   } else if (activeSubsystemFilter === '__unselected__') {
     filtered = filtered.filter(t => !selectedTables.has(t));
   } else if (activeSubsystemFilter) {
-    if (subsystemData && subsystemMapping && subsystemMapping[activeSubsystemFilter]) {
+    const isSubsys = (subsystemData && subsystemData.subsystems && subsystemData.subsystems.some(s => s.key === activeSubsystemFilter))
+                     || activeSubsystemFilter === 'general'
+                     || (subsystemMapping && Object.values(subsystemMapping).includes(activeSubsystemFilter));
+    if (isSubsys) {
       filtered = filtered.filter(t => tableSubsystem(t) === activeSubsystemFilter);
     } else {
       filtered = filtered.filter(t => t.toUpperCase().startsWith(activeSubsystemFilter.toUpperCase()));
@@ -2085,6 +2115,7 @@ function subsystemLocaleName(s) {
 function updateSubsysFilterOptions() {
   const sel = document.getElementById('subsysSelect');
   if (!sel) return;
+  const prevVal = activeSubsystemFilter || sel.value || '';
   sel.innerHTML = '';
 
   const tList = (allTables && allTables.length) ? allTables : Object.keys(tablesData || {});
@@ -2113,15 +2144,38 @@ function updateSubsysFilterOptions() {
     sel.appendChild(unselOpt);
   }
 
+  // Count tables dynamically per subsystem in current active workspace
+  const subsysCounts = {};
+  tList.forEach(t => {
+    const sub = tableSubsystem(t);
+    subsysCounts[sub] = (subsysCounts[sub] || 0) + 1;
+  });
+
   // Option 4: Subsystems if defined
   if (subsystemData && subsystemData.subsystems && subsystemData.subsystems.length > 0) {
-    subsystemData.subsystems.slice().sort((a, b) => (b.tableCount || 0) - (a.tableCount || 0)).forEach(s => {
-      if (!s.tableCount) return;
+    const sortedSubsystems = subsystemData.subsystems.slice().sort((a, b) => {
+      const cA = subsysCounts[a.key] || 0;
+      const cB = subsysCounts[b.key] || 0;
+      return cB - cA;
+    });
+
+    sortedSubsystems.forEach(s => {
+      const count = subsysCounts[s.key] || 0;
+      if (count === 0) return; // Only list subsystems that actually exist in the current workspace tables!
       const o = document.createElement('option');
       o.value = s.key;
-      o.textContent = `${subsystemLocaleName(s)} (${s.tableCount})`;
+      o.textContent = `${subsystemLocaleName(s)} (${count})`;
       sel.appendChild(o);
     });
+
+    // Also include 'general' if there are general tables in this workspace
+    const genCount = subsysCounts['general'] || 0;
+    if (genCount > 0) {
+      const o = document.createElement('option');
+      o.value = 'general';
+      o.textContent = `${isAr ? 'جداول عامة' : 'General Tables'} (${genCount})`;
+      sel.appendChild(o);
+    }
   } else {
     // Dynamic prefixes if no subsystems
     const prefixCounts = {};
@@ -2132,7 +2186,7 @@ function updateSubsysFilterOptions() {
         prefixCounts[p] = (prefixCounts[p] || 0) + 1;
       }
     });
-    Object.keys(prefixCounts).filter(p => prefixCounts[p] >= 2).forEach(p => {
+    Object.keys(prefixCounts).filter(p => prefixCounts[p] >= 2).sort((a, b) => prefixCounts[b] - prefixCounts[a]).forEach(p => {
       const o = document.createElement('option');
       o.value = p;
       o.textContent = `${p} (${prefixCounts[p]})`;
@@ -2140,11 +2194,19 @@ function updateSubsysFilterOptions() {
     });
   }
 
-  sel.value = activeSubsystemFilter;
+  sel.value = prevVal;
+  if (sel.value !== prevVal) {
+    activeSubsystemFilter = '';
+    sel.value = '';
+  }
 }
 
 function setSubsystemFilter(key) {
   activeSubsystemFilter = key || '';
+  const sel = document.getElementById('subsysSelect');
+  if (sel && sel.value !== activeSubsystemFilter) {
+    sel.value = activeSubsystemFilter;
+  }
   buildSidebarList();
   renderFilterChips();
 }
@@ -7183,6 +7245,7 @@ function openSpotlightSearch() {
   var input = document.getElementById('spotlightInput');
   if (!modal || !input) return;
 
+  modal.classList.add('open');
   modal.style.display = 'flex';
   input.value = '';
   spotlightCategory = 'all';
@@ -7199,7 +7262,10 @@ function openSpotlightSearch() {
 
 function closeSpotlightSearch() {
   var modal = document.getElementById('spotlightModal');
-  if (modal) modal.style.display = 'none';
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  }
 }
 
 function closeSpotlightOnBackdrop(e) {
@@ -7241,7 +7307,9 @@ function performSpotlightSearch(query) {
   allTbls.forEach(function(tname) {
     var tdata = tablesData[tname] || {};
     var cols = tdata.columns || [];
-    var subsys = (subsystemData && subsystemData[tname]) ? subsystemData[tname] : (isRTL ? 'عام' : 'General');
+    var subKey = (typeof tableSubsystem === 'function') ? tableSubsystem(tname) : 'general';
+    var subObj = (subsystemData && subsystemData.subsystems) ? subsystemData.subsystems.find(function(s) { return s.key === subKey; }) : null;
+    var subsys = subObj ? subsystemLocaleName(subObj) : (subKey === 'general' ? (isRTL ? 'عام' : 'General') : subKey);
     var pks = new Set((tdata.pks || []).map(function(p) { return String(p).toUpperCase(); }));
     cols.forEach(function(c) { if (c.pk) pks.add(String(c.name).toUpperCase()); });
 
@@ -7444,11 +7512,21 @@ function focusSpotlightResult(item) {
   // 4. Smooth Pan & Zoom to center table
   setTimeout(function() {
     var pos = tablePositions[item.table];
+    var wrap = document.getElementById('canvasWrap');
     if (pos) {
-      panX = (window.innerWidth / 2) - (pos.x + 130) * zoom;
-      panY = (window.innerHeight / 2) - (pos.y + 100) * zoom;
+      var w = wrap ? wrap.clientWidth : window.innerWidth;
+      var h = wrap ? wrap.clientHeight : window.innerHeight;
+      var tw = pos.width || 270;
+      var th = pos.height || 160;
+      panX = (w / 2) - (pos.x + tw / 2) * zoom;
+      panY = (h / 2) - (pos.y + th / 2) * zoom;
       updateCanvasTransform();
     }
+
+    selectedTableNodes.clear();
+    selectedTableNodes.add(item.table);
+    updateSelectionUI();
+    if (typeof updateStatusBar === 'function') updateStatusBar();
 
     // 5. Trigger glowing spotlight-pulse animation
     var nodeEl = document.getElementById('node-' + item.table);

@@ -510,21 +510,42 @@
       <div class="hints-popover" id="hintsPopover" style="display:none;">
         <div class="hints-popover-header">
           <div class="hints-header-title">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
-            <span>اختصارات التحكم بالكانفاس</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/></svg>
+            <span id="i18n-hintsTitle">اختصارات التحكم بالكانفاس</span>
           </div>
           <button class="flyout-close-btn" onclick="toggleHintsPopover(false)" title="إغلاق">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <div class="hints-popover-body">
-          <div class="hint-row"><kbd>Ctrl</kbd> + <b>سحب بالفأرة</b> <span>تحديد متعدد للجداول (Marquee Box)</span></div>
-          <div class="hint-row"><kbd>سحب الجدول</kbd> <span>تحريك الجدول أو المجموعة المحددة</span></div>
-          <div class="hint-row"><kbd>عجلة الفأرة</kbd> <span>تقريب وتصغير الكانفاس (Zoom)</span></div>
-          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>K</kbd> <span>البحث الشامل والمساعد الذكي</span></div>
-          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>Z</kbd> <span>التراجع عن أي حركة (Undo)</span></div>
-          <div class="hint-row"><kbd>Ctrl</kbd> + <kbd>Y</kbd> <span>إعادة الحركة (Redo)</span></div>
-          <div class="hint-row"><kbd>B</kbd> <span>طي / فتح القائمة الجانبية (Sidebar)</span></div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowMarquee">تحديد متعدد للجداول (Marquee Box)</span>
+            <div class="hint-keys"><kbd>Ctrl</kbd><span class="hint-sep">+</span><b id="i18n-keyMouseDrag">سحب بالفأرة</b></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowDrag">تحريك الجدول أو المجموعة المحددة</span>
+            <div class="hint-keys"><kbd id="i18n-keyDragTable">سحب الجدول</kbd></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowZoom">تقريب وتصغير الكانفاس (Zoom)</span>
+            <div class="hint-keys"><kbd id="i18n-keyMouseWheel">عجلة الفأرة</kbd></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowSpotlight">البحث الشامل والمساعد الذكي</span>
+            <div class="hint-keys"><kbd>Ctrl</kbd><span class="hint-sep">+</span><kbd>K</kbd></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowUndo">التراجع عن أي حركة (Undo)</span>
+            <div class="hint-keys"><kbd>Ctrl</kbd><span class="hint-sep">+</span><kbd>Z</kbd></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowRedo">إعادة الحركة (Redo)</span>
+            <div class="hint-keys"><kbd>Ctrl</kbd><span class="hint-sep">+</span><kbd>Y</kbd></div>
+          </div>
+          <div class="hint-row">
+            <span class="hint-desc" id="i18n-hintRowSidebar">طي / فتح القائمة الجانبية (Sidebar)</span>
+            <div class="hint-keys"><kbd>B</kbd></div>
+          </div>
         </div>
       </div>
 

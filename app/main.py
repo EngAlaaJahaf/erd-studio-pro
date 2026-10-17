@@ -5,6 +5,7 @@ import uvicorn
 import json
 import hashlib
 import time
+from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, Body, UploadFile, File as FileParam, Request, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -859,14 +860,20 @@ def download_prepared_export(ticket: str):
     filename = re.sub(r'[\<\>\:\"\/\\\|\?\*]', '_', filename).strip()
 
     # Guarantee correct extension
-    if exp_type == "pdf" and not filename.lower().endswith(".pdf"):
-        filename += ".pdf"
-    elif exp_type == "html" and not filename.lower().endswith(".html"):
-        filename += ".html"
-    elif exp_type == "excel" and not filename.lower().endswith(".xlsx"):
-        filename += ".xlsx"
-    elif exp_type == "sql" and not filename.lower().endswith(".sql"):
-        filename += ".sql"
+    clean_ext = '.' + (exp_type if exp_type != 'excel' else 'xlsx')
+    if not filename.lower().endswith(clean_ext):
+        filename += clean_ext
+
+    # Pure ASCII fallback for legacy HTTP / Starlette latin-1 header encoding
+    base_ascii = re.sub(r'[^\w\d\.\-]', '_', filename, flags=re.ASCII).strip('_')
+    if not base_ascii.lower().endswith(clean_ext):
+        base_ascii += clean_ext
+    if not base_ascii:
+        base_ascii = f"report{clean_ext}"
+
+    # RFC 5987 / RFC 6266 UTF-8 encoded filename for modern browsers
+    encoded_filename = quote(filename)
+    cd_header = f'attachment; filename="{base_ascii}"; filename*=UTF-8\'\'{encoded_filename}'
 
     cached = db.get_cached_schema() or {}
     tables_data = payload.get("tablesData") or cached.get("tablesData") or {}
@@ -892,7 +899,7 @@ def download_prepared_export(ticket: str):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": cd_header,
                 "Content-Type": "application/pdf"
             }
         )
@@ -914,10 +921,10 @@ def download_prepared_export(ticket: str):
         )
         return Response(
             content=html_content,
-            media_type="text/html; charset=utf-8",
+            media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Type": "text/html; charset=utf-8"
+                "Content-Disposition": cd_header,
+                "Content-Type": "application/octet-stream"
             }
         )
     elif exp_type == "excel":
@@ -926,7 +933,7 @@ def download_prepared_export(ticket: str):
             content=xlsx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": cd_header,
                 "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             }
         )
@@ -934,10 +941,10 @@ def download_prepared_export(ticket: str):
         script = payload.get("script", "")
         return Response(
             content=script.encode("utf-8"),
-            media_type="text/sql; charset=utf-8",
+            media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Type": "text/sql; charset=utf-8"
+                "Content-Disposition": cd_header,
+                "Content-Type": "application/octet-stream"
             }
         )
     else:

@@ -6122,17 +6122,14 @@ async function downloadViaNativeServer(type, payload, filename) {
       throw new Error(data.detail || 'Failed to prepare download ticket');
     }
 
-    let iframe = document.getElementById('_native_dl_frame');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = '_native_dl_frame';
-      iframe.style.display = 'none';
-      iframe.style.width = '0px';
-      iframe.style.height = '0px';
-      iframe.style.border = 'none';
-      document.body.appendChild(iframe);
-    }
-    iframe.src = '/api/export/download/' + data.ticket;
+    const downloadUrl = `/api/export/download/${data.ticket}`;
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = downloadUrl;
+    a.setAttribute('download', filename);
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 2000);
     return true;
   } catch (err) {
     console.warn('Native server download failed, falling back:', err);

@@ -84,7 +84,15 @@ def test_linter_api():
     assert "ORPHAN_TABLE" in rules_found, "ORPHAN_TABLE not triggered"
     assert "MISSING_FK_INDEX" in rules_found, "MISSING_FK_INDEX not triggered"
     assert len(data["remediationScript"]) > 20, "Remediation script empty"
-    print(" [PASS] Linter correctly detected all 4 core rules and generated remediation SQL.")
+    
+    # Verify Quick-Fix metadata
+    fixables = [f for f in data["findings"] if f.get("canQuickFix")]
+    print(f" [PASS] Auto-Fixable findings detected: {len(fixables)} of {len(data['findings'])}")
+    assert len(fixables) >= 3, "Expected at least 3 auto-fixable findings"
+    pk_fix = next(f for f in fixables if f["ruleId"] == "MISSING_PK")
+    assert pk_fix["quickFixAction"] == "ADD_PK", "ADD_PK action mismatch"
+    assert "quickFixTitle_ar" in pk_fix, "quickFixTitle_ar missing"
+    print(" [PASS] Linter correctly detected all core rules and enriched findings with Quick-Fix metadata.")
 
 def test_diff_api():
     print("\n--- 3. Testing Schema Diff & Migration API ---")

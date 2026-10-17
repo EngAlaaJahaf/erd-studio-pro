@@ -80,6 +80,10 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                 "severity": "CRITICAL",
                 "table": tname,
                 "column": None,
+                "canQuickFix": True,
+                "quickFixAction": "ADD_PK",
+                "quickFixTitle_ar": f"إضافة مفتاح أساسي تلقائياً (ID)",
+                "quickFixTitle_en": f"Auto-inject Primary Key (ID)",
                 "title_ar": f"الجدول «{tname}» لا يحتوي على مفتاح أساسي (Primary Key)",
                 "title_en": f"Table '{tname}' has no Primary Key",
                 "description_ar": "يؤدي غياب المفتاح الأساسي إلى تدهور أداء الاستعلامات، صعوبة تعقب السجلات الفريدة، وفشل الربط المرجعي وأنظمة الـ ORM.",
@@ -98,6 +102,10 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "severity": "WARNING",
                     "table": tname,
                     "column": pk_col_name,
+                    "canQuickFix": True,
+                    "quickFixAction": "FIX_NULLABLE_PK",
+                    "quickFixTitle_ar": f"تعيين «{pk_col_name}» كـ NOT NULL",
+                    "quickFixTitle_en": f"Set '{pk_col_name}' as NOT NULL",
                     "title_ar": f"حقل المفتاح الأساسي «{pk_col_name}» في «{tname}» يقبل قيماً فارغة (Nullable)",
                     "title_en": f"Primary Key column '{pk_col_name}' in '{tname}' is nullable",
                     "description_ar": "أعمدة المفتاح الأساسي يجب أن تكون معرفة كـ NOT NULL بشكل صريح وفقاً للمعايير القياسية لمنع تضارب البيانات.",
@@ -115,6 +123,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                 "severity": "WARNING",
                 "table": tname,
                 "column": None,
+                "canQuickFix": False,
                 "title_ar": f"الجدول «{tname}» معزول ولا يرتبط بأي علاقة خارجية",
                 "title_en": f"Table '{tname}' is isolated with no incoming or outgoing relations",
                 "description_ar": "الجدول غير مرتبط بأي جدول آخر في المخطط. قد يكون جدول إعدادات ثابتة (Lookup) أو جدولاً قديماً مهجوراً يجب ربطه أو إزالته.",
@@ -125,36 +134,48 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
 
         # Rule 4: Overly Long Identifiers (INFO)
         if len(tname) > 30:
+            short_name = tname[:30]
             findings.append({
                 "ruleId": "LONG_IDENTIFIER",
                 "category": "standards",
                 "severity": "INFO",
                 "table": tname,
                 "column": None,
+                "canQuickFix": True,
+                "quickFixAction": "RENAME_TABLE",
+                "quickFixNewName": short_name,
+                "quickFixTitle_ar": f"تقصير اسم الجدول إلى «{short_name}»",
+                "quickFixTitle_en": f"Shorten table name to '{short_name}'",
                 "title_ar": f"اسم الجدول «{tname}» يتجاوز 30 حرفاً ({len(tname)} حرف)",
                 "title_en": f"Table name '{tname}' exceeds 30 characters ({len(tname)} chars)",
                 "description_ar": "أسماء الكائنات التي تتجاوز 30 حرفاً قد تسبب عدم توافق مع إصدارات Oracle 12.1 والإصدارات الأقدم وبعض أدوات BI.",
                 "description_en": "Identifiers exceeding 30 characters may cause incompatibility on older Oracle versions and BI tools.",
                 "impact": "Portability",
-                "fixSql": f'-- يفضل اختصار الاسم: "{tname[:30]}"'
+                "fixSql": f'-- يفضل اختصار الاسم: "{short_name}"'
             })
 
         # Rule 5: Reserved SQL words used as column names (WARNING)
         for c in cols:
             cname = c.get("name", "")
             if cname.upper() in ORACLE_RESERVED_WORDS:
+                safe_col_name = f"{cname}_VAL"
                 findings.append({
                     "ruleId": "RESERVED_KEYWORD",
                     "category": "standards",
                     "severity": "WARNING",
                     "table": tname,
                     "column": cname,
+                    "canQuickFix": True,
+                    "quickFixAction": "RENAME_COLUMN",
+                    "quickFixNewName": safe_col_name,
+                    "quickFixTitle_ar": f"تغيير التسمية إلى «{safe_col_name}»",
+                    "quickFixTitle_en": f"Rename to '{safe_col_name}'",
                     "title_ar": f"الحقل «{cname}» في جدول «{tname}» يحمل كلمة محجوزة في SQL",
                     "title_en": f"Column '{cname}' in table '{tname}' is a reserved SQL keyword",
                     "description_ar": f"استخدام الكلمات المحجوزة مثل ({cname}) يتطلب وضع علامات التنصيص دائماً وقد يسبب أخطاء غير متوقعة في الاستعلامات والإجراءات المخزنة.",
                     "description_en": f"Reserved keywords require quoted identifiers and often break ORMs and query builders.",
                     "impact": "Code Reliability",
-                    "fixSql": f'ALTER TABLE "{tname}" RENAME COLUMN "{cname}" TO "{cname}_VAL";'
+                    "fixSql": f'ALTER TABLE "{tname}" RENAME COLUMN "{cname}" TO "{safe_col_name}";'
                 })
 
         # Rule 6: Missing Enterprise Audit Columns (GOVERNANCE & COMPLIANCE)
@@ -211,6 +232,10 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "severity": "WARNING",
                     "table": tname,
                     "column": None,
+                    "canQuickFix": True,
+                    "quickFixAction": "ADD_AUDIT_COLUMNS",
+                    "quickFixTitle_ar": "إضافة أعمدة التدقيق المؤسسي القياسية",
+                    "quickFixTitle_en": "Inject Enterprise Audit Columns",
                     "title_ar": f"الجدول «{tname}» يفتقر لأعمدة التدقيق والتعقب المؤسسي ({', '.join(missing_parts)})",
                     "title_en": f"Table '{tname}' lacks enterprise audit tracking columns ({', '.join(missing_parts)})",
                     "description_ar": "تتطلب معايير حوكمة البيانات المؤسسية (Data Governance) وجود حقول زمنية وهوية للإنشاء والتعديل لضمان الشفافية ومسار التدقيق المحاسبي والنظامي.",
@@ -231,6 +256,10 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "severity": "WARNING",
                     "table": tname,
                     "column": cname,
+                    "canQuickFix": True,
+                    "quickFixAction": "TAG_PII",
+                    "quickFixTitle_ar": f"توسيم الحقل «{cname}» كـ PII مشفر",
+                    "quickFixTitle_en": f"Tag '{cname}' as Sensitive / Masked PII",
                     "title_ar": f"الحقل «{cname}» في جدول «{tname}» قد يحتوي على بيانات سرية / حساسة (PII & Security)",
                     "title_en": f"Column '{cname}' in '{tname}' may store sensitive personal or credential data (PII)",
                     "description_ar": "وفقاً لمعايير الأمان والحوكمة الدولية (ISO 27001 / GDPR / PCI-DSS)، يجب التأكد من تشفير أو تجزئة (Hashing عبر Argon2 / bcrypt) هذا الحقل وعدم تخزينه كنص صريح.",
@@ -250,6 +279,11 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "severity": "WARNING",
                     "table": tname,
                     "column": cname,
+                    "canQuickFix": True,
+                    "quickFixAction": "RENAME_COLUMN",
+                    "quickFixNewName": safe_name,
+                    "quickFixTitle_ar": f"تصحيح التسمية إلى «{safe_name}»",
+                    "quickFixTitle_en": f"Sanitize to '{safe_name}'",
                     "title_ar": f"اسم الحقل «{cname}» في جدول «{tname}» يحتوي على مسافات أو رموز خاصة",
                     "title_en": f"Column name '{cname}' in table '{tname}' contains whitespace or special characters",
                     "description_ar": "استخدام المسافات أو الرموز الخاصة في التسميات يتطلب وضع علامات حصر إجبارية ويكسر أدوات الـ ORM وتوليد استعلامات الـ API.",
@@ -302,6 +336,11 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "severity": "CRITICAL",
                     "table": child_tbl,
                     "column": child_col_name,
+                    "canQuickFix": True,
+                    "quickFixAction": "FIX_FK_DATATYPE",
+                    "quickFixTargetType": p_type,
+                    "quickFixTitle_ar": f"مزامنة نوع الحقل مع الأب ({p_type})",
+                    "quickFixTitle_en": f"Align Datatype with Parent ({p_type})",
                     "title_ar": f"عدم تطابق نوع المفتاح الأجنبي «{child_tbl}.{child_col_name}» ({c_type}) مع أصله «{parent_tbl}.{parent_col_name}» ({p_type})",
                     "title_en": f"FK datatype mismatch: '{child_tbl}.{child_col_name}' ({c_type}) vs '{parent_tbl}.{parent_col_name}' ({p_type})",
                     "description_ar": "اختلاف نوع أو طول حقل المفتاح الخارجي عن المفتاح الأساسي المقابل يسبب فشل إنشاء القيد في بعض قواعد البيانات وبطء شديد في عمليات الربط (JOIN).",
@@ -322,6 +361,10 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                 "severity": "WARNING",
                 "table": child_tbl,
                 "column": child_col_name,
+                "canQuickFix": True,
+                "quickFixAction": "ADD_FK_INDEX",
+                "quickFixTitle_ar": f"إنشاء فهرس على «{child_col_name}»",
+                "quickFixTitle_en": f"Create Index on '{child_col_name}'",
                 "title_ar": f"غياب الفهرس عن حقل المفتاح الأجنبي «{child_tbl}.{child_col_name}»",
                 "title_en": f"Missing index on Foreign Key column '{child_tbl}.{child_col_name}'",
                 "description_ar": "عدم وجود فهرس على أعمدة المفاتيح الأجنبية في Oracle يؤدي إلى إقفال كامل للجدول (Share Lock) عند حذف أو تعديل صفوف من الجدول الأب.",

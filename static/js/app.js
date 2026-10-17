@@ -4189,6 +4189,56 @@ function renderTables() {
     headerText.textContent = t;
     g.appendChild(headerText);
 
+    // Table Linter Alert Pill if findings exist
+    if (window.currentLintResults && Array.isArray(window.currentLintResults.findings)) {
+      const tFindings = window.currentLintResults.findings.filter(f => f.table === t && !f.fixed);
+      if (tFindings.length > 0) {
+        const hasCrit = tFindings.some(f => f.severity === 'CRITICAL');
+        const pillG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        pillG.setAttribute('class', 'table-linter-pill');
+        pillG.setAttribute('transform', `translate(${TABLE_WIDTH - 30}, 8)`);
+        pillG.setAttribute('cursor', 'pointer');
+
+        const pillRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        pillRect.setAttribute('x', '0');
+        pillRect.setAttribute('y', '0');
+        pillRect.setAttribute('width', '22');
+        pillRect.setAttribute('height', '18');
+        pillRect.setAttribute('rx', '4');
+        pillRect.setAttribute('fill', hasCrit ? '#ef4444' : '#f59e0b');
+        pillRect.setAttribute('fill-opacity', '0.92');
+        pillRect.setAttribute('stroke', '#ffffff');
+        pillRect.setAttribute('stroke-width', '0.75');
+        pillG.appendChild(pillRect);
+
+        const pillTxt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        pillTxt.setAttribute('x', '11');
+        pillTxt.setAttribute('y', '12.5');
+        pillTxt.setAttribute('text-anchor', 'middle');
+        pillTxt.setAttribute('fill', '#ffffff');
+        pillTxt.setAttribute('font-size', '10.5');
+        pillTxt.setAttribute('font-weight', '800');
+        pillTxt.textContent = String(tFindings.length);
+        pillG.appendChild(pillTxt);
+
+        const pillTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        pillTitle.textContent = `${tFindings.length} ملاحظات معمارية في جدول ${t} (اضغط للمعاينة والإصلاح)`;
+        pillG.appendChild(pillTitle);
+
+        pillG.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          switchView('audit');
+          switchAuditTab('linter');
+          const chip = document.querySelector(`.chip[data-filter="${hasCrit ? 'CRITICAL' : 'WARNING'}"]`);
+          if (chip && typeof filterLinterFindings === 'function') {
+            filterLinterFindings(hasCrit ? 'CRITICAL' : 'WARNING', chip);
+          }
+        });
+
+        g.appendChild(pillG);
+      }
+    }
+
     // Attribute Rows
     cols.forEach((col, idx) => {
       const rowY = HEADER_HEIGHT + idx * ROW_HEIGHT;
@@ -4197,9 +4247,17 @@ function renderTables() {
       const isFK = fkList.some(f => f.child === t && f.cols.includes(col.name));
       const keyLabel = (isPK && isFK) ? 'PK,FK' : isPK ? 'PK' : isFK ? 'FK' : '';
 
+      let badges = [];
+      if (keyLabel) badges.push(keyLabel);
+      if (col.pii || col.sensitive) badges.push('🔒PII');
+      if (col.indexed) badges.push('⚡IDX');
+      const badgeTextCombined = badges.join(' ');
+
       // Name Box (Left)
       const nameRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       nameRect.setAttribute('class', isOdd ? 'er attributeBoxOdd' : 'er attributeBoxEven');
+      nameRect.setAttribute('id', `col-row-${t}-${col.name}`);
+      nameRect.setAttribute('data-col', col.name);
       nameRect.setAttribute('x', '0');
       nameRect.setAttribute('y', rowY);
       nameRect.setAttribute('width', TYPE_COL_WIDTH);
@@ -4225,6 +4283,7 @@ function renderTables() {
       // Type Box (Right)
       const typeRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       typeRect.setAttribute('class', isOdd ? 'er attributeBoxOdd' : 'er attributeBoxEven');
+      typeRect.setAttribute('data-col', col.name);
       typeRect.setAttribute('x', TYPE_COL_WIDTH);
       typeRect.setAttribute('y', rowY);
       typeRect.setAttribute('width', TABLE_WIDTH - TYPE_COL_WIDTH);
@@ -4242,15 +4301,19 @@ function renderTables() {
       typeText.textContent = col.type;
       g.appendChild(typeText);
 
-      // Key Badge Text (right end of type cell, clear of long column names)
-      if (keyLabel) {
+      // Key / Metadata Badges (PK, FK, PII, IDX)
+      if (badgeTextCombined) {
         const keyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        keyText.setAttribute('class', 'er attrTextKey');
+        keyText.setAttribute('class', 'er attrTextKey' + (col.pii || col.sensitive ? ' pii-badge' : ''));
         keyText.setAttribute('x', TABLE_WIDTH - 6);
         keyText.setAttribute('y', rowY + ROW_HEIGHT / 2);
         keyText.setAttribute('text-anchor', 'end');
         keyText.setAttribute('direction', 'ltr');
-        keyText.textContent = keyLabel;
+        if (col.pii || col.sensitive) {
+          keyText.setAttribute('fill', '#f87171');
+          keyText.setAttribute('font-weight', '700');
+        }
+        keyText.textContent = badgeTextCombined;
         g.appendChild(keyText);
       }
     });
@@ -7221,17 +7284,21 @@ function switchAuditTab(tabId) {
 
 // ------------------------- 1. SCHEMA LINTER -------------------------
 
-async function runSchemaLint() {
+async function runSchemaLint(silent) {
   const isRTL = currentLang === 'ar';
   try {
-    showToast(isRTL ? '⏳ جاري فحص الجودة المعمارية للمخطط...' : '⏳ Running schema architecture audit...');
+    if (!silent) {
+      showToast(isRTL ? '⏳ جاري فحص الجودة المعمارية للمخطط...' : '⏳ Running schema architecture audit...');
+    }
     
     let schema = currentDiagramSchema();
     if (!schema.tablesData || Object.keys(schema.tablesData).length === 0) {
       schema = { tablesData: tablesData, fkList: fkList };
     }
     if (!schema.tablesData || Object.keys(schema.tablesData).length === 0) {
-      showToast(isRTL ? '⚠️ لا توجد جداول لفحصها في المخطط' : '⚠️ No tables found to audit');
+      if (!silent) {
+        showToast(isRTL ? '⚠️ لا توجد جداول لفحصها في المخطط' : '⚠️ No tables found to audit');
+      }
       return;
     }
 
@@ -7260,6 +7327,7 @@ async function runSchemaLint() {
     const badge = document.getElementById('linterGradeBadge');
     const title = document.getElementById('linterRatingTitle');
     const remBtn = document.getElementById('btnDownloadRemediation');
+    const fixAllBtn = document.getElementById('btnQuickFixAll');
 
     if (circle) {
       circle.textContent = data.score;
@@ -7295,13 +7363,33 @@ async function runSchemaLint() {
       remBtn.style.display = (data.findings && data.findings.length > 0) ? 'inline-flex' : 'none';
     }
 
+    // Auto-Fix All Button
+    const fixableCount = (data.findings || []).filter(f => f.canQuickFix !== false && !f.fixed).length;
+    if (fixAllBtn) {
+      if (fixableCount > 0) {
+        fixAllBtn.style.display = 'inline-flex';
+        fixAllBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> <span id="i18n-btnFixAll">' + (isRTL ? ('⚡ إصلاح آلي شامل (' + fixableCount + ')') : ('⚡ Auto-Fix All (' + fixableCount + ')')) + '</span>';
+      } else {
+        fixAllBtn.style.display = 'none';
+      }
+    }
+
+    // Re-render canvas to update table badges if visible
+    if (typeof renderTables === 'function' && selectedTables.size > 0) {
+      renderTables();
+    }
+
     // Render findings
     renderLinterFindings(data.findings, 'all');
 
-    showToast(isRTL ? ('✅ اكتمل الفحص: التقييم ' + data.grade + ' (' + data.score + '/100)') : ('✅ Audit complete: Grade ' + data.grade + ' (' + data.score + '/100)'));
+    if (!silent) {
+      showToast(isRTL ? ('✅ اكتمل الفحص: التقييم ' + data.grade + ' (' + data.score + '/100)') : ('✅ Audit complete: Grade ' + data.grade + ' (' + data.score + '/100)'));
+    }
   } catch (err) {
     console.error('runSchemaLint error:', err);
-    showToast('❌ ' + err.message);
+    if (!silent) {
+      showToast('❌ ' + err.message);
+    }
   }
 }
 
@@ -7379,8 +7467,23 @@ function renderLinterFindings(findings, filter) {
     const cat = categoryMeta[f.category] || { label: f.category || '', icon: '📌', color: '#6b7280' };
     const catBadge = f.category ? ('<span class="finding-cat-tag" style="background:' + cat.color + '18; color:' + cat.color + '; border:1px solid ' + cat.color + '35; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; display:inline-flex; align-items:center; gap:3px;">' + cat.icon + ' ' + cat.label + '</span>') : '';
 
+    const isFixed = Boolean(f.fixed);
+    const canQuickFix = !isFixed && (f.canQuickFix !== false) && (f.quickFixAction || ['MISSING_PK','NULLABLE_PK','MISSING_AUDIT_COLUMNS','PII_SENSITIVE_DATA','MISSING_FK_INDEX','FK_DATATYPE_MISMATCH','RESERVED_KEYWORD','NON_STANDARD_NAMING','LONG_IDENTIFIER'].includes(f.ruleId));
+
+    let fixBtnHtml = '';
+    if (isFixed) {
+      fixBtnHtml = '<span class="finding-fixed-pill">✅ ' + (isRTL ? 'تم الإصلاح في المخطط' : 'Fixed in schema') + '</span>';
+    } else if (canQuickFix) {
+      const qTitle = isRTL ? (f.quickFixTitle_ar || '⚡ إصلاح فوري في المخطط') : (f.quickFixTitle_en || '⚡ Quick Fix');
+      fixBtnHtml = 
+        '<button class="btn-tool btn-sm btn-quick-fix" onclick="applyLintQuickFix(' + idx + ')" title="' + (isRTL ? 'تطبيق الإصلاح التلقائي في المخطط بنقرة واحدة' : 'Apply instant automated fix to active diagram') + '">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>' +
+          '<span>' + qTitle + '</span>' +
+        '</button>';
+    }
+
     html += 
-      '<div class="finding-card sev-' + sevClass + ' severity-' + (f.severity || 'INFO') + '">' +
+      '<div class="finding-card sev-' + sevClass + ' severity-' + (f.severity || 'INFO') + (isFixed ? ' is-fixed' : '') + '">' +
         '<div class="finding-header">' +
           '<div class="finding-header-left">' +
             '<span class="finding-badge badge-' + sevClass + ' ' + (f.severity || 'INFO') + '">' + f.severity + '</span>' +
@@ -7390,11 +7493,12 @@ function renderLinterFindings(findings, filter) {
             colBadge +
           '</div>' +
           '<div class="finding-actions">' +
-            (f.table ? ('<button class="btn-tool btn-sm" onclick="focusLintTable(\\\'' + f.table + '\\\')" title="' + (isRTL ? 'التركيز على الجدول في المخطط' : 'Focus on canvas') + '">' +
+            fixBtnHtml +
+            (f.table ? ('<button class="btn-tool btn-sm" onclick="focusLintFinding(' + idx + ')" title="' + (isRTL ? 'التركيز والوميض على الجدول في الكانفاس' : 'Focus and pulse on canvas table') + '">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
               '<span>' + (isRTL ? 'عرض على الكانفاس' : 'Canvas Focus') + '</span>' +
             '</button>') : '') +
-            (f.fixSql ? ('<button class="btn-tool btn-sm primary" onclick="copyLintFix(' + idx + ')" title="' + (isRTL ? 'نسخ كود المعالجة التلقائي' : 'Copy SQL fix') + '">' +
+            (!isFixed && f.fixSql ? ('<button class="btn-tool btn-sm primary" onclick="copyLintFix(' + idx + ')" title="' + (isRTL ? 'نسخ كود المعالجة التلقائي' : 'Copy SQL fix') + '">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
               '<span>' + (isRTL ? 'نسخ حل SQL' : 'Copy SQL Fix') + '</span>' +
             '</button>') : '') +
@@ -7402,39 +7506,336 @@ function renderLinterFindings(findings, filter) {
         '</div>' +
         (descText ? ('<div class="finding-message">' + descText + '</div>') : '') +
         (f.impact ? ('<div class="finding-recommendation">⚠️ <b>' + (isRTL ? 'التأثير المؤسسي والمعماري:' : 'Impact:') + '</b> ' + f.impact + '</div>') : '') +
-        (f.fixSql ? ('<div class="finding-sql-box"><pre><code>' + f.fixSql + '</code></pre></div>') : '') +
+        (!isFixed && f.fixSql ? ('<div class="finding-sql-box"><pre><code>' + f.fixSql + '</code></pre></div>') : '') +
       '</div>';
   });
 
   container.innerHTML = html;
 }
 
-function focusLintTable(tableName) {
+function focusLintFinding(idx) {
+  if (!currentLintResults || !currentLintResults.findings) return;
+  const f = currentLintResults.findings[idx];
+  if (!f || !f.table) return;
+  focusLintTable(f.table, f.column, f.severity);
+}
+
+function focusLintTable(tableName, colName, severity) {
   if (!tableName) return;
   const isRTL = currentLang === 'ar';
   switchView('canvas');
 
   if (tablesData[tableName] && !selectedTables.has(tableName)) {
     selectedTables.add(tableName);
+    if (typeof buildSidebarList === 'function') buildSidebarList();
     renderAll();
   }
 
   setTimeout(function() {
-    const pos = tablePositions[tableName];
-    if (pos) {
-      panX = window.innerWidth / 2 - (pos.x + 140) * zoom;
-      panY = window.innerHeight / 2 - (pos.y + 100) * zoom;
-      applyTransform();
+    if (typeof focusTables === 'function') {
+      focusTables([tableName]);
+    } else {
+      const pos = tablePositions[tableName];
+      if (pos) {
+        panX = window.innerWidth / 2 - (pos.x + 140) * zoom;
+        panY = window.innerHeight / 2 - (pos.y + 100) * zoom;
+        updateCanvasTransform();
+      }
     }
-    const el = document.getElementById('table-' + tableName);
-    if (el) {
-      el.classList.add('audit-pulse', 'is-highlighted');
+    const nodeEl = document.getElementById('node-' + tableName);
+    if (nodeEl) {
+      const pulseClass = (severity === 'CRITICAL') ? 'audit-pulse-critical' : (severity === 'WARNING') ? 'audit-pulse-warning' : 'audit-pulse';
+      nodeEl.classList.remove('audit-pulse', 'audit-pulse-critical', 'audit-pulse-warning');
+      void nodeEl.offsetWidth; // force reflow
+      nodeEl.classList.add(pulseClass, 'is-highlighted');
       setTimeout(function() {
-        el.classList.remove('audit-pulse', 'is-highlighted');
-      }, 3500);
+        nodeEl.classList.remove(pulseClass, 'is-highlighted');
+      }, 3600);
     }
-    showToast(isRTL ? ('🎯 تم التركيز على جدول ' + tableName) : ('🎯 Focused on ' + tableName));
-  }, 100);
+    if (colName) {
+      const colEl = document.getElementById('col-row-' + tableName + '-' + colName);
+      if (colEl) {
+        colEl.classList.remove('col-row-pulse');
+        void colEl.offsetWidth;
+        colEl.classList.add('col-row-pulse');
+        setTimeout(function() {
+          colEl.classList.remove('col-row-pulse');
+        }, 3600);
+      }
+    }
+    showToast(isRTL 
+      ? ('🎯 تم التركيز على جدول ' + tableName + (colName ? (' (الحقل: ' + colName + ')') : '')) 
+      : ('🎯 Focused on ' + tableName + (colName ? (' (column: ' + colName + ')') : '')));
+  }, 120);
+}
+
+function executeQuickFixOnSchema(f, dialect) {
+  if (!f || !f.table) return false;
+  const t = f.table;
+  const colName = f.column;
+  const action = f.quickFixAction || f.ruleId;
+
+  if (action === 'ADD_PK' || action === 'MISSING_PK') {
+    if (!tablesData[t]) return false;
+    tablesData[t].columns = tablesData[t].columns || [];
+    tablesData[t].pks = tablesData[t].pks || [];
+
+    const idCol = tablesData[t].columns.find(c => c.name.toUpperCase() === 'ID' || c.name.toUpperCase() === (t + '_ID').toUpperCase());
+    if (idCol) {
+      idCol.pk = true;
+      idCol.nullable = false;
+      if (!tablesData[t].pks.includes(idCol.name)) {
+        tablesData[t].pks.push(idCol.name);
+      }
+    } else {
+      let pkType = 'INTEGER';
+      if (dialect === 'oracle') pkType = 'NUMBER GENERATED ALWAYS AS IDENTITY';
+      else if (dialect === 'postgres') pkType = 'BIGSERIAL';
+      else if (dialect === 'mysql') pkType = 'BIGINT AUTO_INCREMENT';
+
+      const newPkCol = {
+        name: 'ID',
+        type: pkType,
+        pk: true,
+        nullable: false
+      };
+      tablesData[t].columns.unshift(newPkCol);
+      tablesData[t].pks = ['ID'];
+    }
+    if (tablePositions[t]) tablePositions[t].height = getTableHeight(t);
+    return true;
+  }
+
+  if (action === 'FIX_NULLABLE_PK' || action === 'NULLABLE_PK') {
+    if (!tablesData[t] || !colName) return false;
+    const c = tablesData[t].columns.find(x => x.name.toUpperCase() === colName.toUpperCase());
+    if (c) {
+      c.nullable = false;
+      return true;
+    }
+    return false;
+  }
+
+  if (action === 'ADD_AUDIT_COLUMNS' || action === 'MISSING_AUDIT_COLUMNS') {
+    if (!tablesData[t]) return false;
+    tablesData[t].columns = tablesData[t].columns || [];
+    const existing = new Set(tablesData[t].columns.map(x => x.name.toUpperCase()));
+    const textType = (dialect === 'oracle') ? 'VARCHAR2(100)' : 'VARCHAR(100)';
+
+    if (!existing.has('CREATED_AT')) {
+      tablesData[t].columns.push({ name: 'CREATED_AT', type: 'TIMESTAMP', default: 'CURRENT_TIMESTAMP', nullable: false });
+    }
+    if (!existing.has('CREATED_BY')) {
+      tablesData[t].columns.push({ name: 'CREATED_BY', type: textType, default: "'SYSTEM'", nullable: false });
+    }
+    if (!existing.has('UPDATED_AT')) {
+      tablesData[t].columns.push({ name: 'UPDATED_AT', type: 'TIMESTAMP', default: 'CURRENT_TIMESTAMP', nullable: true });
+    }
+    if (!existing.has('UPDATED_BY')) {
+      tablesData[t].columns.push({ name: 'UPDATED_BY', type: textType, default: null, nullable: true });
+    }
+    if (tablePositions[t]) tablePositions[t].height = getTableHeight(t);
+    return true;
+  }
+
+  if (action === 'TAG_PII' || action === 'PII_SENSITIVE_DATA') {
+    if (!tablesData[t] || !colName) return false;
+    const c = tablesData[t].columns.find(x => x.name.toUpperCase() === colName.toUpperCase());
+    if (c) {
+      c.pii = true;
+      c.sensitive = true;
+      c.masked = true;
+      c.comment = (c.comment ? (c.comment + ' | ') : '') + '🔒 Confidential PII (Encrypted/Masked)';
+      return true;
+    }
+    return false;
+  }
+
+  if (action === 'ADD_FK_INDEX' || action === 'MISSING_FK_INDEX') {
+    if (!tablesData[t] || !colName) return false;
+    tablesData[t].indexes = tablesData[t].indexes || [];
+    const idxName = 'IDX_' + t.substring(0, 16) + '_' + colName.substring(0, 10);
+    if (!tablesData[t].indexes.some(i => i.name === idxName)) {
+      tablesData[t].indexes.push({ name: idxName, columns: [colName], unique: false });
+    }
+    const c = tablesData[t].columns.find(x => x.name.toUpperCase() === colName.toUpperCase());
+    if (c) c.indexed = true;
+    return true;
+  }
+
+  if (action === 'FIX_FK_DATATYPE' || action === 'FK_DATATYPE_MISMATCH') {
+    if (!tablesData[t] || !colName) return false;
+    let targetType = f.quickFixTargetType;
+    if (!targetType) {
+      const matchFk = fkList.find(fk => fk.child === t && (fk.cols === colName || (typeof fk.cols === 'string' && fk.cols.includes(colName))));
+      if (matchFk && tablesData[matchFk.parent]) {
+        const parentPk = matchFk.parentCol || tablesData[matchFk.parent].pks?.[0];
+        const pCol = tablesData[matchFk.parent].columns.find(x => x.name.toUpperCase() === (parentPk || '').toUpperCase());
+        if (pCol) targetType = pCol.type;
+      }
+    }
+    if (!targetType) return false;
+    const c = tablesData[t].columns.find(x => x.name.toUpperCase() === colName.toUpperCase());
+    if (c) {
+      c.type = targetType;
+      return true;
+    }
+    return false;
+  }
+
+  if (action === 'RENAME_COLUMN' || action === 'RESERVED_KEYWORD' || action === 'NON_STANDARD_NAMING') {
+    if (!tablesData[t] || !colName) return false;
+    const newName = f.quickFixNewName || colName.replace(/[\s\-]+/g, '_').toUpperCase();
+    const c = tablesData[t].columns.find(x => x.name.toUpperCase() === colName.toUpperCase());
+    if (c) {
+      c.name = newName;
+      if (tablesData[t].pks) {
+        tablesData[t].pks = tablesData[t].pks.map(p => p.toUpperCase() === colName.toUpperCase() ? newName : p);
+      }
+      fkList.forEach(fk => {
+        if (fk.child === t && fk.cols) {
+          fk.cols = fk.cols.replace(new RegExp('\\b' + colName + '\\b', 'i'), newName);
+        }
+        if (fk.parent === t && fk.parentCol) {
+          fk.parentCol = fk.parentCol.replace(new RegExp('\\b' + colName + '\\b', 'i'), newName);
+        }
+      });
+      return true;
+    }
+    return false;
+  }
+
+  if (action === 'RENAME_TABLE' || action === 'LONG_IDENTIFIER') {
+    const oldName = t;
+    const newName = f.quickFixNewName || oldName.substring(0, 30);
+    if (!tablesData[oldName] || tablesData[newName]) return false;
+    tablesData[newName] = tablesData[oldName];
+    delete tablesData[oldName];
+    if (tablePositions[oldName]) {
+      tablePositions[newName] = tablePositions[oldName];
+      delete tablePositions[oldName];
+    }
+    if (selectedTables.has(oldName)) {
+      selectedTables.delete(oldName);
+      selectedTables.add(newName);
+    }
+    fkList.forEach(fk => {
+      if (fk.child === oldName) fk.child = newName;
+      if (fk.parent === oldName) fk.parent = newName;
+    });
+    return true;
+  }
+
+  return false;
+}
+
+async function applyLintQuickFix(findingIndex) {
+  if (!currentLintResults || !currentLintResults.findings) return;
+  const f = currentLintResults.findings[findingIndex];
+  if (!f || f.fixed) return;
+
+  const isRTL = currentLang === 'ar';
+  const dialectEl = document.getElementById('dbExportDialect');
+  const dialect = (dialectEl ? dialectEl.value : 'oracle') || 'oracle';
+
+  const prevSchema = {
+    tablesData: JSON.parse(JSON.stringify(tablesData)),
+    fkList: JSON.parse(JSON.stringify(fkList))
+  };
+
+  const ok = executeQuickFixOnSchema(f, dialect);
+  if (!ok) {
+    showToast(isRTL ? '⚠️ تعذر تطبيق الإصلاح الآلي على هذا العنصر' : '⚠️ Could not auto-fix this finding');
+    return;
+  }
+
+  // Push Undo Action
+  const nextSchema = {
+    tablesData: JSON.parse(JSON.stringify(tablesData)),
+    fkList: JSON.parse(JSON.stringify(fkList))
+  };
+
+  if (typeof pushUndoAction === 'function') {
+    pushUndoAction({
+      type: 'SCHEMA_MUTATION',
+      title: (isRTL ? 'إصلاح معماري: ' : 'Linter Quick-Fix: ') + (isRTL ? (f.quickFixTitle_ar || f.title_ar) : (f.quickFixTitle_en || f.title_en)),
+      prev: prevSchema,
+      next: nextSchema
+    });
+  }
+
+  f.fixed = true;
+
+  allTables = Object.keys(tablesData);
+  if (typeof buildSidebarList === 'function') buildSidebarList();
+  renderAll();
+  scheduleAutoSave();
+
+  await runSchemaLint(true);
+
+  showToast(isRTL ? ('✅ تم الإصلاح بنجاح: ' + (f.quickFixTitle_ar || f.title_ar)) : ('✅ Remediation applied: ' + (f.quickFixTitle_en || f.title_en)));
+
+  if (f.table) {
+    focusLintTable(f.table, f.column, 'INFO');
+  }
+}
+
+async function applyAllLintQuickFixes() {
+  if (!currentLintResults || !currentLintResults.findings) return;
+  const isRTL = currentLang === 'ar';
+  const dialectEl = document.getElementById('dbExportDialect');
+  const dialect = (dialectEl ? dialectEl.value : 'oracle') || 'oracle';
+
+  const fixables = currentLintResults.findings.filter(f => f.canQuickFix !== false && !f.fixed);
+  if (fixables.length === 0) {
+    showToast(isRTL ? 'ℹ️ لا توجد مشاكل قابلة للإصلاح الآلي المباشر' : 'ℹ️ No auto-fixable findings found');
+    return;
+  }
+
+  const prevSchema = {
+    tablesData: JSON.parse(JSON.stringify(tablesData)),
+    fkList: JSON.parse(JSON.stringify(fkList))
+  };
+
+  let fixedCount = 0;
+  for (const f of fixables) {
+    const success = executeQuickFixOnSchema(f, dialect);
+    if (success) {
+      f.fixed = true;
+      fixedCount++;
+    }
+  }
+
+  if (fixedCount === 0) {
+    showToast(isRTL ? '⚠️ تعذر تطبيق الإصلاحات' : '⚠️ Could not apply fixes');
+    return;
+  }
+
+  // Push single batch Undo Action
+  const nextSchema = {
+    tablesData: JSON.parse(JSON.stringify(tablesData)),
+    fkList: JSON.parse(JSON.stringify(fkList))
+  };
+
+  if (typeof pushUndoAction === 'function') {
+    pushUndoAction({
+      type: 'SCHEMA_MUTATION',
+      title: isRTL ? ('إصلاح آلي شامل (' + fixedCount + ' عنصر)') : ('Auto-Fix All (' + fixedCount + ' issues)'),
+      prev: prevSchema,
+      next: nextSchema
+    });
+  }
+
+  allTables = Object.keys(tablesData);
+  if (typeof buildSidebarList === 'function') buildSidebarList();
+  renderAll();
+  scheduleAutoSave();
+
+  await runSchemaLint(false);
+
+  showToast(isRTL 
+    ? ('🎉 تم بنجاح تطبيق ' + fixedCount + ' إصلاح معماري! تم رفع تقييم المخطط فوراً.') 
+    : ('🎉 Applied ' + fixedCount + ' architectural fixes! Schema health score updated.'));
 }
 
 function copyLintFix(findingIndex) {

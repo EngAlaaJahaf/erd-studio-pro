@@ -2554,13 +2554,114 @@ body[dir="ltr"] .finding-card.severity-INFO {
 
 /* Audit Canvas Table Pulse Effect */
 @keyframes tableAuditPulse {
-  0% { filter: drop-shadow(0 0 0px rgba(59, 130, 246, 0.9)); transform: scale(1); }
-  50% { filter: drop-shadow(0 0 25px rgba(59, 130, 246, 1)); transform: scale(1.04); }
-  100% { filter: drop-shadow(0 0 0px rgba(59, 130, 246, 0)); transform: scale(1); }
+  0% { filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.6)); }
+  50% { filter: drop-shadow(0 0 28px rgba(59, 130, 246, 1)) drop-shadow(0 0 8px #60a5fa); }
+  100% { filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0)); }
 }
+@keyframes tableAuditPulseCritical {
+  0% { filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.6)); }
+  50% { filter: drop-shadow(0 0 32px rgba(239, 68, 68, 1)) drop-shadow(0 0 10px #f87171); }
+  100% { filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0)); }
+}
+@keyframes tableAuditPulseWarning {
+  0% { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6)); }
+  50% { filter: drop-shadow(0 0 30px rgba(245, 158, 11, 1)) drop-shadow(0 0 8px #fbbf24); }
+  100% { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0)); }
+}
+@keyframes colAuditPulse {
+  0% { fill: rgba(239, 68, 68, 0.2); stroke: #ef4444; stroke-width: 1.5px; }
+  50% { fill: rgba(239, 68, 68, 0.55); stroke: #f87171; stroke-width: 2.5px; }
+  100% { fill: rgba(239, 68, 68, 0.2); stroke: #ef4444; stroke-width: 1.5px; }
+}
+
 .table-node.audit-pulse {
-  animation: tableAuditPulse 1.2s ease-in-out 3;
+  animation: tableAuditPulse 1.1s ease-in-out 3;
   z-index: 999 !important;
+}
+.table-node.audit-pulse-critical {
+  animation: tableAuditPulseCritical 1.1s ease-in-out 3;
+  z-index: 999 !important;
+}
+.table-node.audit-pulse-warning {
+  animation: tableAuditPulseWarning 1.1s ease-in-out 3;
+  z-index: 999 !important;
+}
+.col-row-pulse rect {
+  animation: colAuditPulse 0.9s ease-in-out 4 !important;
+}
+
+/* Quick-Fix & Remediation Styles */
+.btn-quick-fix {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25)) !important;
+  border: 1px solid rgba(245, 158, 11, 0.45) !important;
+  color: #fbbf24 !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.15) !important;
+}
+.btn-quick-fix:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.38), rgba(234, 88, 12, 0.48)) !important;
+  border-color: #f59e0b !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
+}
+
+#btnQuickFixAll {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  border: 1px solid #f59e0b !important;
+  color: #0b1120 !important;
+  font-weight: 800 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+#btnQuickFixAll:hover {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+  box-shadow: 0 0 22px rgba(245, 158, 11, 0.6) !important;
+  transform: translateY(-1px);
+}
+
+.finding-card.is-fixed {
+  opacity: 0.72;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05), var(--bg-card)) !important;
+}
+.finding-card.is-fixed .finding-rule-name,
+.finding-card.is-fixed .finding-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.finding-card.is-fixed .btn-quick-fix {
+  display: none !important;
+}
+
+.finding-fixed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+/* Canvas Table Linter Badges & Column Metadata */
+.table-linter-pill {
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.table-linter-pill:hover {
+  transform: scale(1.15);
+  filter: brightness(1.25);
 }
 
 

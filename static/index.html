@@ -818,6 +818,10 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
               <span id="i18n-tabConvert">محول لهجات SQL (Transpiler)</span>
             </button>
+            <button class="audit-tab-btn" id="auditTabHistory" onclick="switchAuditTab('history')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+              <span id="i18n-tabHistory">سجل الحوكمة واللقطات (Audit Trail & Snapshots)</span>
+            </button>
           </div>
 
           <!-- ════════════ PANEL 1: SCHEMA LINTER ════════════ -->
@@ -1029,6 +1033,108 @@
                   </div>
                 </div>
                 <textarea class="form-input migration-code-editor" id="transpileSqlOutput" spellcheck="false" readonly style="min-height:240px; direction:ltr; font-family:ui-monospace,Consolas,monospace; font-size:12px;"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════════════ PANEL 5: AUDIT TRAIL & HISTORICAL SNAPSHOTS ════════════ -->
+          <div class="audit-panel" id="panel-audit-history" style="display:none;">
+            <!-- Top Dashboard Metrics Row -->
+            <div class="audit-hero-card" style="margin-bottom:16px;">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; width:100%;">
+                <div class="stat-card" style="background:var(--bg-card); padding:12px 16px; border-radius:10px; border:1px solid var(--border);">
+                  <div style="font-size:11px; color:var(--text-muted); font-weight:600;" id="i18n-statTotalEvents">إجمالي الأحداث المسجلة</div>
+                  <div style="font-size:22px; font-weight:800; color:var(--accent, #3b82f6); margin-top:4px;" id="statTotalEventsCount">0</div>
+                </div>
+                <div class="stat-card" style="background:var(--bg-card); padding:12px 16px; border-radius:10px; border:1px solid var(--border);">
+                  <div style="font-size:11px; color:var(--text-muted); font-weight:600;" id="i18n-statSnapshots">لقطات المخطط (Snapshots)</div>
+                  <div style="font-size:22px; font-weight:800; color:#10b981; margin-top:4px;" id="statSnapshotsCount">0</div>
+                </div>
+                <div class="stat-card" style="background:var(--bg-card); padding:12px 16px; border-radius:10px; border:1px solid var(--border);">
+                  <div style="font-size:11px; color:var(--text-muted); font-weight:600;" id="i18n-statLiveMigrations">عمليات الترحيل المباشر</div>
+                  <div style="font-size:22px; font-weight:800; color:#8b5cf6; margin-top:4px;" id="statLiveMigrationsCount">0</div>
+                </div>
+                <div class="stat-card" style="background:var(--bg-card); padding:12px 16px; border-radius:10px; border:1px solid var(--border);">
+                  <div style="font-size:11px; color:var(--text-muted); font-weight:600;" id="i18n-statLastEvent">آخر نشاط مسجل</div>
+                  <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" id="statLastEventTitle">—</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Toolbar & Controls -->
+            <div class="diff-control-box" style="margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <!-- Sub-view switcher: Events Feed vs Snapshots List -->
+                <div class="filter-chips" id="historySubViewChips">
+                  <button class="chip active" id="btnViewEventsFeed" onclick="switchHistorySubView('events')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                    <span id="i18n-subEventsFeed">سجل الأحداث والعمليات</span>
+                  </button>
+                  <button class="chip" id="btnViewSnapshots" onclick="switchHistorySubView('snapshots')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <span id="i18n-subSnapshots">لقطات المخطط والنسخ الاحتياطي</span>
+                  </button>
+                </div>
+
+                <!-- Actions -->
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <button class="btn-tool btn-sm primary" onclick="openCreateSnapshotModal()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="12" y1="10" x2="12" y2="16"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+                    <span id="i18n-btnTakeSnapshot">أخذ لقطة للمخطط الآن</span>
+                  </button>
+                  <button class="btn-tool btn-sm" onclick="exportAuditTrailLogs('csv')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>تصدير CSV</span>
+                  </button>
+                  <button class="btn-tool btn-sm" onclick="exportAuditTrailLogs('json')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>تصدير JSON</span>
+                  </button>
+                  <button class="btn-tool btn-sm" onclick="promptPruneAuditLogs()" title="حذف السجلات القديمة مع الإبقاء على أحدث 50 سجلاً">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span>تنظيف</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Search and Filters Bar -->
+              <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center;">
+                <input type="text" id="auditEventSearchInput" class="form-input" style="flex:1; min-width:200px; font-size:12px;" placeholder="بحث في عناوين وتفاصيل الأحداث..." oninput="handleAuditSearchDebounced()" />
+                <select id="auditEventFilterSelect" class="form-input" style="width:auto; font-size:12px;" onchange="loadAuditEvents()">
+                  <option value="ALL">كافة أنواع الأحداث</option>
+                  <option value="MIGRATION_LIVE">ترحيل حي (Live Migration)</option>
+                  <option value="MIGRATION_DRY_RUN">محاكاة تجريبية (Dry-Run)</option>
+                  <option value="LINT_AUDIT">فحص الجودة المعمارية (Linter)</option>
+                  <option value="SCHEMA_SNAPSHOT">لقطات المخطط (Snapshots)</option>
+                  <option value="SCHEMA_RESTORE">عمليات الاستعادة (Restores)</option>
+                </select>
+                <select id="auditSeverityFilterSelect" class="form-input" style="width:auto; font-size:12px;" onchange="loadAuditEvents()">
+                  <option value="ALL">كافة المستويات</option>
+                  <option value="SUCCESS">ناجحة (SUCCESS)</option>
+                  <option value="WARNING">تحذيرات (WARNING)</option>
+                  <option value="CRITICAL">حرجة / فشل (CRITICAL)</option>
+                  <option value="INFO">معلومات (INFO)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- View 1: Events Timeline Feed -->
+            <div id="historyEventsView">
+              <div class="findings-list" id="auditEventsListContainer">
+                <div class="audit-empty-state">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                  <div>جاري تحميل سجل الأحداث المؤسسية...</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- View 2: Schema Snapshots Time Machine -->
+            <div id="historySnapshotsView" style="display:none;">
+              <div class="snapshots-grid" id="auditSnapshotsListContainer" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:14px;">
+                <div class="audit-empty-state">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+                  <div>لا توجد لقطات محفوظة حالياً. يمكنك أخذ لقطة فورية من الزر أعلاه.</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1894,6 +2000,45 @@ CREATE TABLE orders (
           <span id="btnRunMigrationActionText">🛡️ بدء المحاكاة التجريبية (Dry-Run)</span>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ CREATE SCHEMA SNAPSHOT MODAL ════════════ -->
+<div class="modal-overlay" id="modalCreateSnapshot" style="display:none;" onclick="if(event.target===this) closeCreateSnapshotModal()">
+  <div class="settings-modal" style="max-width:480px; width:92%;">
+    <div class="settings-header" style="padding:16px 20px; border-bottom:1px solid var(--border);">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:36px; height:36px; border-radius:8px; background:rgba(16,185,129,0.15); color:#10b981; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+        <div>
+          <div class="settings-modal-title" style="font-size:15px; font-weight:700;" id="i18n-createSnapTitle">أخذ لقطة جديدة للمخطط (Take Schema Snapshot)</div>
+          <div class="settings-modal-subtitle" style="font-size:11.5px; color:var(--text-muted);" id="i18n-createSnapSub">حفظ نسخة احتياطية تاريخية للمخطط الحالي للرجوع لها في أي وقت</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeCreateSnapshotModal()" title="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div style="padding:18px 20px; display:flex; flex-direction:column; gap:14px;">
+      <div class="form-group">
+        <label style="font-size:12px; font-weight:600; margin-bottom:4px;" id="i18n-lblSnapName">اسم اللقطة / الإصدار:</label>
+        <input type="text" id="inputSnapshotName" class="form-input" style="font-size:12.5px;" placeholder="مثال: إصدار قبل ترقية الفواتير 1.2" />
+      </div>
+      <div class="form-group">
+        <label style="font-size:12px; font-weight:600; margin-bottom:4px;" id="i18n-lblSnapDesc">وصف أو ملاحظات (اختياري):</label>
+        <textarea id="inputSnapshotDesc" class="form-input" style="height:70px; font-size:12px; resize:none;" placeholder="ملاحظات حول هذا الإصدار والهدف منه..."></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px;">
+      <button class="btn-tool btn-sm" onclick="closeCreateSnapshotModal()" id="i18n-btnCancelSnap">إلغاء</button>
+      <button class="btn-tool btn-sm primary" id="btnConfirmCreateSnapshot" onclick="submitCreateSnapshot()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span id="i18n-btnSaveSnap">حفظ اللقطة</span>
+      </button>
     </div>
   </div>
 </div>

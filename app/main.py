@@ -29,6 +29,7 @@ from app.services import schema_linter
 from app.services import schema_diff
 from app.services import mock_data
 from app.services import live_migration
+from app.services import audit_trail
 
 # Initialize SQLite Database
 db.init_db()
@@ -968,7 +969,26 @@ def audit_schema_endpoint(req: Optional[AuditLintRequest] = Body(None)):
     fk_list = (req.fkList if req and req.fkList is not None else cached.get("fkList")) or []
     dialect = (req.dialect if req and req.dialect else cached.get("dialect", "oracle"))
     try:
-        return schema_linter.audit_schema(tables_data, fk_list, dialect=dialect)
+        report = schema_linter.audit_schema(tables_data, fk_list, dialect=dialect)
+        # Automatically record audit event in governance history
+        try:
+            audit_trail.log_event(
+                event_type=audit_trail.EVENT_LINT_AUDIT,
+                title=f"فحص الجودة المعمارية (تقييم {report.get('grade')} - {report.get('score')}/100)",
+                description=f"تم فحص {len(tables_data)} جدول واكتشاف {len(report.get('findings', []))} ملاحظة.",
+                severity="WARNING" if report.get("score", 100) < 75 else "INFO",
+                dialect=dialect,
+                details={
+                    "score": report.get("score"),
+                    "grade": report.get("grade"),
+                    "findingsCount": len(report.get("findings", [])),
+                    "counts": report.get("counts", {}),
+                    "categories": report.get("categories", {})
+                }
+            )
+        except Exception as e_log:
+            print("Audit event log error:", e_log)
+        return report
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Audit failed: {e}")
 
@@ -1046,12 +1066,58 @@ def run_migration_endpoint(req: MigrationRunRequest):
             )
 
     try:
+        # If live execution (not dry-run), auto-capture a safety snapshot before modifying DB
+        snapshot_id = None
+        if not req.dryRun:
+            try:
+                cached = db.get_cached_schema() or {}
+                if cached.get("tablesData"):
+                    snap = audit_trail.take_snapshot(
+                        name=f"نسخة احتياطية قبل الترحيل الحي - {time.strftime('%Y-%m-%d %H:%M:%S')}",
+                        trigger_event="PRE_MIGRATION",
+                        description=f"لقطة تلقائية لمخطط قاعدة البيانات قبل تنفيذ سكربت الترحيل على {req.dialect or 'oracle'}.",
+                        dialect=req.dialect or "oracle"
+                    )
+                    snapshot_id = snap.get("snapshotId")
+            except Exception as e_snap:
+                print("Pre-migration auto snapshot warning:", e_snap)
+
         res = live_migration.execute_migration(
             dialect=req.dialect or "oracle",
             params=req.params,
             sql_script=req.sqlScript,
             dry_run=bool(req.dryRun)
         )
+
+        # Log migration event in enterprise audit trail
+        try:
+            ev_type = audit_trail.EVENT_MIGRATION_DRY_RUN if req.dryRun else audit_trail.EVENT_MIGRATION_LIVE
+            sev = "SUCCESS" if res.get("success") else "CRITICAL"
+            mode_label = "محاكاة تجريبية (Dry-Run)" if req.dryRun else "ترحيل حي على قاعدة البيانات"
+            status_label = "ناجح" if res.get("success") else "فشل"
+            title = f"{mode_label} ({status_label})"
+            desc = f"تم تشغيل {res.get('totalStatements', 0)} تعليمة على {res.get('targetDatabase', req.dialect)} ({res.get('successCount', 0)} ناجحة، {res.get('errorCount', 0)} فاشلة) في {res.get('totalDurationMs', 0)}ms."
+            audit_trail.log_event(
+                event_type=ev_type,
+                title=title,
+                description=desc,
+                severity=sev,
+                dialect=req.dialect,
+                target_db=res.get("targetDatabase"),
+                details={
+                    "dryRun": req.dryRun,
+                    "totalStatements": res.get("totalStatements"),
+                    "successCount": res.get("successCount"),
+                    "errorCount": res.get("errorCount"),
+                    "destructiveCount": res.get("destructiveCount"),
+                    "totalDurationMs": res.get("totalDurationMs"),
+                    "error": res.get("error")
+                },
+                snapshot_id=snapshot_id
+            )
+        except Exception as e_log:
+            print("Migration audit log warning:", e_log)
+
         return res
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Migration execution failed: {e}")
@@ -1108,6 +1174,146 @@ def get_migration_targets_endpoint():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Enterprise Audit Trail & Historical Schema Snapshots Endpoints ---
+
+class SnapshotCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    triggerEvent: Optional[str] = "MANUAL"
+    trigger_event: Optional[str] = None
+    tablesData: Optional[Dict[str, Any]] = None
+    tables_data: Optional[Dict[str, Any]] = None
+    fkList: Optional[List[Dict[str, Any]]] = None
+    fk_list: Optional[List[Dict[str, Any]]] = None
+    schema_data: Optional[Dict[str, Any]] = None
+    dialect: Optional[str] = "oracle"
+
+@app.get("/api/audit/events")
+def get_audit_events_endpoint(
+    limit: int = 100,
+    offset: int = 0,
+    eventType: Optional[str] = None,
+    event_type: Optional[str] = None,
+    severity: Optional[str] = None,
+    search: Optional[str] = None,
+    q: Optional[str] = None
+):
+    try:
+        et = event_type or eventType
+        if et == "ALL": et = None
+        sev = severity
+        if sev == "ALL": sev = None
+        s = search or q
+        events = db.get_audit_events(limit=limit, offset=offset, event_type=et, severity=sev, search=s)
+        total = db.count_audit_events(event_type=et, severity=sev, search=s)
+        return {
+            "success": True,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "events": events
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch audit events: {e}")
+
+@app.get("/api/audit/stats")
+def get_audit_stats_endpoint():
+    try:
+        stats = db.get_audit_stats()
+        return {"success": True, "stats": stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/audit/events/clear")
+def clear_audit_events_endpoint(keepLatest: int = 50, keep_latest: Optional[int] = None):
+    try:
+        effective_keep = keep_latest if keep_latest is not None else keepLatest
+        deleted_count = db.count_audit_events()
+        db.clear_audit_events(keep_latest=effective_keep)
+        remaining = db.count_audit_events()
+        actual_deleted = max(0, deleted_count - remaining)
+        return {"success": True, "deleted_count": actual_deleted, "message": f"Audit events pruned, kept latest {effective_keep}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/audit/events/export")
+def export_audit_events_endpoint(format: str = "json", limit: int = 500):
+    try:
+        events = db.get_audit_events(limit=limit, offset=0)
+        if format.lower() == "csv":
+            csv_content = audit_trail.export_audit_log_csv(events)
+            filename = f"audit_trail_log_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            return Response(
+                content=csv_content,
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            )
+        else:
+            json_content = audit_trail.export_audit_log_json(events)
+            filename = f"audit_trail_log_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            return Response(
+                content=json_content,
+                media_type="application/json; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {e}")
+
+@app.post("/api/audit/snapshots")
+def create_snapshot_endpoint(req: SnapshotCreateRequest):
+    try:
+        tables = req.tablesData or req.tables_data
+        fks = req.fkList or req.fk_list
+        if not tables and req.schema_data:
+            tables = req.schema_data.get("tablesData")
+            fks = req.schema_data.get("fkList")
+        trigger = req.trigger_event or req.triggerEvent or "MANUAL"
+        res = audit_trail.take_snapshot(
+            name=req.name,
+            trigger_event=trigger,
+            description=req.description,
+            tables_data=tables,
+            fk_list=fks,
+            dialect=req.dialect
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/audit/snapshots")
+def list_snapshots_endpoint(limit: int = 50):
+    try:
+        return {
+            "success": True,
+            "snapshots": db.get_schema_snapshots(limit=limit)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/audit/snapshots/{snapshot_id}")
+def get_snapshot_endpoint(snapshot_id: int):
+    snap = db.get_schema_snapshot_by_id(snapshot_id)
+    if not snap:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"success": True, "snapshot": snap}
+
+@app.post("/api/audit/snapshots/{snapshot_id}/restore")
+def restore_snapshot_endpoint(snapshot_id: int):
+    try:
+        res = audit_trail.restore_snapshot(snapshot_id)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/audit/snapshots/{snapshot_id}")
+def delete_snapshot_endpoint(snapshot_id: int):
+    success = db.delete_schema_snapshot(snapshot_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"success": True, "message": "Snapshot deleted"}
+    return {"success": True, "message": f"Snapshot #{snapshot_id} deleted"}
 
 
 @app.post("/api/settings/test-db")

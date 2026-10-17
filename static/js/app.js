@@ -2431,6 +2431,22 @@ function applyLanguage(lang) {
     setTextIf('i18n-migConfirmDesc', 'أؤكد أنني أمتلك الصلاحيات الإدارية وأتحمل مسؤولية تطبيق أوامر DDL مباشرة على الخادم الحي.', 'I confirm administrative authorization and accept responsibility for executing DDL directly against the live server.');
     setTextIf('i18n-btnMigClose', 'إغلاق', 'Close');
 
+    // Stage 3: Audit Trail & Historical Schema Snapshots
+    setTextIf('i18n-tabHistory', 'سجل الحوكمة واللقطات (Audit Trail & Snapshots)', 'Audit Trail & Snapshots');
+    setTextIf('i18n-statTotalEvents', 'إجمالي الأحداث المسجلة', 'Total Recorded Events');
+    setTextIf('i18n-statSnapshots', 'لقطات المخطط (Snapshots)', 'Schema Snapshots');
+    setTextIf('i18n-statLiveMigrations', 'عمليات الترحيل المباشر', 'Live DB Migrations');
+    setTextIf('i18n-statLastEvent', 'آخر نشاط مسجل', 'Last Recorded Event');
+    setTextIf('i18n-subEventsFeed', 'سجل الأحداث والعمليات', 'Audit Events Feed');
+    setTextIf('i18n-subSnapshots', 'لقطات المخطط والنسخ الاحتياطي', 'Historical Schema Snapshots');
+    setTextIf('i18n-btnTakeSnapshot', 'أخذ لقطة للمخطط الآن', 'Take Schema Snapshot');
+    setTextIf('i18n-createSnapTitle', 'أخذ لقطة جديدة للمخطط (Take Schema Snapshot)', 'Take Schema Snapshot');
+    setTextIf('i18n-createSnapSub', 'حفظ نسخة احتياطية تاريخية للمخطط الحالي للرجوع لها في أي وقت', 'Save a historical snapshot of active schema to restore at any time');
+    setTextIf('i18n-lblSnapName', 'اسم اللقطة / الإصدار:', 'Snapshot / Version Name:');
+    setTextIf('i18n-lblSnapDesc', 'وصف أو ملاحظات (اختياري):', 'Description or Notes (Optional):');
+    setTextIf('i18n-btnCancelSnap', 'إلغاء', 'Cancel');
+    setTextIf('i18n-btnSaveSnap', 'حفظ اللقطة', 'Save Snapshot');
+
     relTag('i18n-spotlightBtn', 'spotlightBtn');
     if (document.getElementById('spotlightInput') && t.spotlightPlaceholder) {
       document.getElementById('spotlightInput').placeholder = t.spotlightPlaceholder;
@@ -7297,7 +7313,7 @@ let diffMigrationMode = 'forward'; // 'forward' or 'rollback'
 
 function switchAuditTab(tabId) {
   currentAuditTab = tabId;
-  ['linter', 'diff', 'mock', 'convert'].forEach(function(t) {
+  ['linter', 'diff', 'mock', 'convert', 'history'].forEach(function(t) {
     const btn = document.getElementById('auditTab' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel-audit-' + t);
     if (btn) btn.classList.toggle('active', t === tabId);
@@ -7305,6 +7321,9 @@ function switchAuditTab(tabId) {
   });
   if (tabId === 'diff') {
     populateDiffSelectors();
+  }
+  if (tabId === 'history') {
+    loadAuditHistoryData();
   }
 }
 
@@ -8728,6 +8747,435 @@ function openTranspiledInNewTab() {
   showToast(isRTL ? '🚀 تم فتح المخطط المحول في تبويب جديد' : '🚀 Opened transpiled schema in new tab');
 }
 
+// ------------------------- 5. ENTERPRISE AUDIT TRAIL & SCHEMA SNAPSHOTS -------------------------
+
+let currentHistorySubView = 'events'; // 'events' or 'snapshots'
+let auditSearchDebounceTimer = null;
+
+function switchHistorySubView(view) {
+  currentHistorySubView = view;
+  const btnEvents = document.getElementById('btnViewEventsFeed');
+  const btnSnaps = document.getElementById('btnViewSnapshots');
+  const viewEvents = document.getElementById('historyEventsView');
+  const viewSnaps = document.getElementById('historySnapshotsView');
+
+  if (btnEvents) btnEvents.classList.toggle('active', view === 'events');
+  if (btnSnaps) btnSnaps.classList.toggle('active', view === 'snapshots');
+  if (viewEvents) viewEvents.style.display = (view === 'events') ? 'block' : 'none';
+  if (viewSnaps) viewSnaps.style.display = (view === 'snapshots') ? 'block' : 'none';
+
+  if (view === 'events') {
+    loadAuditEvents();
+  } else {
+    loadSchemaSnapshots();
+  }
+}
+
+async function loadAuditHistoryData() {
+  await Promise.all([
+    loadAuditStats(),
+    currentHistorySubView === 'events' ? loadAuditEvents() : loadSchemaSnapshots()
+  ]);
+}
+
+async function loadAuditStats() {
+  try {
+    const res = await fetch('/api/audit/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.success) return;
+
+    const stats = data.stats || {};
+    const totalEl = document.getElementById('statTotalEventsCount');
+    const snapsEl = document.getElementById('statSnapshotsCount');
+    const liveEl = document.getElementById('statLiveMigrationsCount');
+    const lastEl = document.getElementById('statLastEventTitle');
+
+    if (totalEl) totalEl.textContent = stats.total_events || 0;
+    if (snapsEl) snapsEl.textContent = stats.snapshots_count || 0;
+    if (liveEl) liveEl.textContent = stats.live_migrations_count || 0;
+    if (lastEl) {
+      if (stats.last_event) {
+        lastEl.textContent = stats.last_event.title + ' (' + (stats.last_event.created_at || '').slice(11, 19) + ')';
+        lastEl.title = stats.last_event.title + ' - ' + stats.last_event.created_at;
+      } else {
+        lastEl.textContent = currentLang === 'ar' ? 'لا يوجد نشاط' : 'No activity';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load audit stats:', err);
+  }
+}
+
+function handleAuditSearchDebounced() {
+  if (auditSearchDebounceTimer) clearTimeout(auditSearchDebounceTimer);
+  auditSearchDebounceTimer = setTimeout(function() {
+    loadAuditEvents();
+  }, 300);
+}
+
+async function loadAuditEvents() {
+  const container = document.getElementById('auditEventsListContainer');
+  if (!container) return;
+  const isRTL = currentLang === 'ar';
+
+  const q = (document.getElementById('auditEventSearchInput')?.value || '').trim();
+  const eventType = document.getElementById('auditEventFilterSelect')?.value || 'ALL';
+  const severity = document.getElementById('auditSeverityFilterSelect')?.value || 'ALL';
+
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (eventType && eventType !== 'ALL') params.set('event_type', eventType);
+  if (severity && severity !== 'ALL') params.set('severity', severity);
+  params.set('limit', '100');
+
+  try {
+    const res = await fetch('/api/audit/events?' + params.toString());
+    if (!res.ok) throw new Error('Failed to fetch events');
+    const data = await res.json();
+    renderAuditEventsList(data.events || []);
+  } catch (err) {
+    container.innerHTML = '<div class="audit-empty-state"><span style="color:#ef4444;">❌ ' + _escapeHtml(err.message) + '</span></div>';
+  }
+}
+
+function renderAuditEventsList(events) {
+  const container = document.getElementById('auditEventsListContainer');
+  if (!container) return;
+  const isRTL = currentLang === 'ar';
+
+  if (!events || events.length === 0) {
+    container.innerHTML = 
+      '<div class="audit-empty-state">' +
+        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>' +
+        '<div>' + (isRTL ? 'لا توجد أحداث مطابقة في سجل التدقيق' : 'No matching audit events found') + '</div>' +
+      '</div>';
+    return;
+  }
+
+  const typeLabels = {
+    'MIGRATION_LIVE': isRTL ? 'ترحيل حي' : 'Live Migration',
+    'MIGRATION_DRY_RUN': isRTL ? 'محاكاة تجريبية' : 'Dry-Run Simulation',
+    'LINT_AUDIT': isRTL ? 'فحص الجودة' : 'Lint Audit',
+    'SCHEMA_SNAPSHOT': isRTL ? 'لقطة مخطط' : 'Schema Snapshot',
+    'SCHEMA_RESTORE': isRTL ? 'استعادة مخطط' : 'Schema Restore'
+  };
+
+  const html = events.map(function(ev) {
+    const sev = ev.severity || 'INFO';
+    const type = ev.event_type || 'SYSTEM';
+    const hasSnapshot = Boolean(ev.snapshot_id);
+    let metaStr = '';
+    if (ev.metadata_json) {
+      try {
+        const parsed = typeof ev.metadata_json === 'string' ? JSON.parse(ev.metadata_json) : ev.metadata_json;
+        metaStr = JSON.stringify(parsed, null, 2);
+      } catch (e) {
+        metaStr = String(ev.metadata_json);
+      }
+    }
+
+    const displayType = typeLabels[type] || type;
+
+    return (
+      '<div class="audit-event-item event-sev-' + _escapeHtml(sev) + '">' +
+        '<div class="event-header">' +
+          '<div class="event-title-wrap">' +
+            '<span class="event-type-badge type-' + _escapeHtml(type) + '">' + _escapeHtml(displayType) + '</span>' +
+            '<span class="finding-badge ' + _escapeHtml(sev) + '">' + _escapeHtml(sev) + '</span>' +
+            '<span style="font-weight:700; font-size:13px; color:var(--text);">' + _escapeHtml(ev.title || '') + '</span>' +
+          '</div>' +
+          '<div class="event-time">' + _escapeHtml(ev.created_at || '') + '</div>' +
+        '</div>' +
+        (ev.description ? '<div class="event-desc">' + _escapeHtml(ev.description) + '</div>' : '') +
+        (metaStr ? 
+          '<details style="margin-top:4px;">' +
+            '<summary style="font-size:11px; color:var(--accent); cursor:pointer; font-weight:600;">' + (isRTL ? 'عرض بيانات الحدث (Metadata)' : 'View Event Metadata') + '</summary>' +
+            '<pre class="event-meta-box" style="margin-top:6px;">' + _escapeHtml(metaStr) + '</pre>' +
+          '</details>' : '') +
+        (hasSnapshot ? 
+          '<div style="margin-top:6px; display:flex; justify-content:flex-end;">' +
+            '<button class="btn-tool btn-sm" onclick="restoreSnapshotFromHistory(\'' + _escapeHtml(ev.snapshot_id) + '\')">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>' +
+              '<span>' + (isRTL ? 'استعادة لقطة هذا الحدث' : 'Restore Event Snapshot') + '</span>' +
+            '</button>' +
+          '</div>' : '') +
+      '</div>'
+    );
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+async function loadSchemaSnapshots() {
+  const container = document.getElementById('auditSnapshotsListContainer');
+  if (!container) return;
+  const isRTL = currentLang === 'ar';
+
+  try {
+    const res = await fetch('/api/audit/snapshots');
+    if (!res.ok) throw new Error('Failed to fetch snapshots');
+    const data = await res.json();
+    renderSchemaSnapshotsGrid(data.snapshots || []);
+  } catch (err) {
+    container.innerHTML = '<div class="audit-empty-state"><span style="color:#ef4444;">❌ ' + _escapeHtml(err.message) + '</span></div>';
+  }
+}
+
+function renderSchemaSnapshotsGrid(snapshots) {
+  const container = document.getElementById('auditSnapshotsListContainer');
+  if (!container) return;
+  const isRTL = currentLang === 'ar';
+
+  if (!snapshots || snapshots.length === 0) {
+    container.innerHTML = 
+      '<div class="audit-empty-state" style="grid-column:1/-1;">' +
+        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>' +
+        '<div>' + (isRTL ? 'لا توجد لقطات محفوظة حالياً. يمكنك أخذ لقطة فورية من الزر أعلاه.' : 'No snapshots saved yet. You can take a snapshot now using the button above.') + '</div>' +
+      '</div>';
+    return;
+  }
+
+  const triggerLabels = {
+    'MANUAL': isRTL ? 'يدوي' : 'Manual',
+    'PRE_MIGRATION': isRTL ? 'قبل ترحيل حي' : 'Pre-Migration',
+    'RESTORE': isRTL ? 'استعادة' : 'Restore'
+  };
+
+  const html = snapshots.map(function(s) {
+    const trigger = s.trigger_event || 'MANUAL';
+    const triggerClass = 'trigger-' + trigger;
+
+    return (
+      '<div class="snapshot-card">' +
+        '<div class="snapshot-card-head">' +
+          '<div style="display:flex; align-items:center; gap:10px;">' +
+            '<div class="snapshot-icon">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
+            '</div>' +
+            '<div>' +
+              '<div class="snapshot-title">' + _escapeHtml(s.name || 'Untitled Snapshot') + '</div>' +
+              '<div class="snapshot-date">' + _escapeHtml(s.created_at || '') + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<span class="trigger-pill ' + _escapeHtml(triggerClass) + '">' + _escapeHtml(triggerLabels[trigger] || trigger) + '</span>' +
+        '</div>' +
+        '<div class="snapshot-desc">' + _escapeHtml(s.description || (isRTL ? 'بدون ملاحظات إضافية' : 'No description provided')) + '</div>' +
+        '<div class="snapshot-metrics-row">' +
+          '<span class="snapshot-metric-pill">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>' +
+            '<span>' + (s.table_count || 0) + ' ' + (isRTL ? 'جداول' : 'Tables') + '</span>' +
+          '</span>' +
+          '<span style="color:var(--border);">•</span>' +
+          '<span class="snapshot-metric-pill">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+            '<span>' + (s.fk_count || 0) + ' ' + (isRTL ? 'علاقات' : 'FKs') + '</span>' +
+          '</span>' +
+        '</div>' +
+        '<div class="snapshot-actions">' +
+          '<button class="btn-tool btn-sm danger" onclick="deleteSnapshotFromHistory(\'' + _escapeHtml(s.id) + '\')" title="' + (isRTL ? 'حذف اللقطة' : 'Delete Snapshot') + '">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+            '<span>' + (isRTL ? 'حذف' : 'Delete') + '</span>' +
+          '</button>' +
+          '<button class="btn-tool btn-sm primary" onclick="restoreSnapshotFromHistory(\'' + _escapeHtml(s.id) + '\')">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>' +
+            '<span>' + (isRTL ? 'استعادة المخطط' : 'Restore Schema') + '</span>' +
+          '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function openCreateSnapshotModal() {
+  const modal = document.getElementById('modalCreateSnapshot');
+  const nameInput = document.getElementById('inputSnapshotName');
+  const descInput = document.getElementById('inputSnapshotDesc');
+  const isRTL = currentLang === 'ar';
+
+  const now = new Date();
+  const timeStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (nameInput) {
+    nameInput.value = (isRTL ? 'لقطة يدوية - ' : 'Manual Snapshot - ') + timeStr;
+  }
+  if (descInput) {
+    descInput.value = '';
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeCreateSnapshotModal() {
+  const modal = document.getElementById('modalCreateSnapshot');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitCreateSnapshot() {
+  const nameInput = document.getElementById('inputSnapshotName');
+  const descInput = document.getElementById('inputSnapshotDesc');
+  const isRTL = currentLang === 'ar';
+  const name = (nameInput ? nameInput.value : '').trim();
+  const desc = (descInput ? descInput.value : '').trim();
+
+  if (!name) {
+    showToast(isRTL ? '⚠️ يرجى تحديد اسم للقطة' : '⚠️ Please provide a snapshot name');
+    return;
+  }
+
+  let schema = currentDiagramSchema();
+  if (!schema.tablesData || Object.keys(schema.tablesData).length === 0) {
+    schema = { tablesData: tablesData, fkList: fkList };
+  }
+
+  try {
+    const btn = document.getElementById('btnConfirmCreateSnapshot');
+    if (btn) btn.disabled = true;
+
+    const res = await fetch('/api/audit/snapshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        description: desc,
+        trigger_event: 'MANUAL',
+        schema_data: schema
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(function() { return {}; });
+      throw new Error(err.detail || 'Failed to save snapshot');
+    }
+
+    closeCreateSnapshotModal();
+    showToast(isRTL ? '📸 تم أخذ وحفظ لقطة المخطط بنجاح' : '📸 Snapshot created successfully');
+    await loadAuditHistoryData();
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  } finally {
+    const btn = document.getElementById('btnConfirmCreateSnapshot');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function restoreSnapshotFromHistory(snapshotId) {
+  if (!snapshotId) return;
+  const isRTL = currentLang === 'ar';
+
+  const confirmMsg = isRTL 
+    ? 'هل أنت متأكد من استعادة هذه النسخة للمخطط؟ سيتم تحديث الكانفاس ببيانات النسخة المختارة.'
+    : 'Are you sure you want to restore this schema snapshot? Active canvas tables and relationships will be replaced with this version.';
+
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    showToast(isRTL ? '⏳ جاري استعادة النسخة الاحتياطية...' : '⏳ Restoring schema snapshot...');
+    const res = await fetch('/api/audit/snapshots/' + encodeURIComponent(snapshotId) + '/restore', {
+      method: 'POST'
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(function() { return {}; });
+      throw new Error(err.detail || 'Failed to restore snapshot');
+    }
+
+    const data = await res.json();
+    if (!data.success) throw new Error(data.detail || 'Restore failed');
+
+    // Ingest the restored schema directly into active state
+    if (data.schema && data.schema.tablesData) {
+      tablesData = data.schema.tablesData;
+      fkList = data.schema.fkList || [];
+      if (typeof selectedTables !== 'undefined') {
+        selectedTables = new Set(Object.keys(tablesData));
+      }
+      if (typeof currentDiagramSchema === 'function') {
+        try {
+          const activeWs = (typeof getActiveWorkspace === 'function') ? getActiveWorkspace() : null;
+          if (activeWs) {
+            activeWs.schema = { tablesData: tablesData, fkList: fkList };
+          }
+        } catch(e) {}
+      }
+      if (typeof renderTables === 'function') {
+        renderTables();
+      }
+      if (typeof drawRelationships === 'function') {
+        drawRelationships();
+      }
+      if (typeof updateMinimap === 'function') {
+        updateMinimap();
+      }
+      if (typeof renderSidebarList === 'function') {
+        renderSidebarList();
+      }
+    }
+
+    showToast(isRTL ? '✅ تم استعادة المخطط بنجاح من اللقطة التاريخية!' : '✅ Schema restored successfully from historical snapshot!');
+    await loadAuditHistoryData();
+  } catch (err) {
+    console.error('restoreSnapshotFromHistory error:', err);
+    showToast('❌ ' + err.message);
+  }
+}
+
+async function deleteSnapshotFromHistory(snapshotId) {
+  if (!snapshotId) return;
+  const isRTL = currentLang === 'ar';
+
+  if (!confirm(isRTL ? 'هل تريد حذف هذه اللقطة نهائياً؟' : 'Permanently delete this snapshot?')) return;
+
+  try {
+    const res = await fetch('/api/audit/snapshots/' + encodeURIComponent(snapshotId), {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(function() { return {}; });
+      throw new Error(err.detail || 'Failed to delete snapshot');
+    }
+    showToast(isRTL ? '🗑️ تم حذف اللقطة' : '🗑️ Snapshot deleted');
+    await loadAuditHistoryData();
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  }
+}
+
+function exportAuditTrailLogs(format) {
+  const isRTL = currentLang === 'ar';
+  showToast(isRTL ? '⏳ جاري تصدير سجل التدقيق المؤسسي...' : '⏳ Exporting audit trail logs...');
+  const fmt = (format || 'csv').toLowerCase();
+  const url = '/api/audit/events/export?format=' + fmt;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'audit_events_' + Date.now() + '.' + fmt;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function promptPruneAuditLogs() {
+  const isRTL = currentLang === 'ar';
+  const confirmMsg = isRTL
+    ? 'هل ترغب في تنظيف السجلات القديمة مع الإبقاء على أحدث 50 حدثاً؟'
+    : 'Prune older audit records while retaining the 50 most recent events?';
+
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch('/api/audit/events/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_latest: 50 })
+    });
+    if (!res.ok) throw new Error('Failed to prune audit logs');
+    const data = await res.json();
+    showToast(isRTL ? ('🧹 تم تنظيف ' + (data.deleted_count || 0) + ' سجلاً قديماً') : ('🧹 Pruned ' + (data.deleted_count || 0) + ' older records'));
+    await loadAuditHistoryData();
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  }
+}
 
 // ============================================================================
 // ⚡ PRODUCTIVITY & UX: SPOTLIGHT SEARCH (Ctrl + K) & UNDO/REDO

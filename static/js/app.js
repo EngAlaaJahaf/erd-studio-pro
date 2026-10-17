@@ -6110,6 +6110,36 @@ function getCleanWorkspaceFilename(prefix, ext) {
   return `${prefix}_${cleanWs}_${dateStr}.${ext}`;
 }
 
+async function downloadViaNativeServer(type, payload, filename) {
+  try {
+    const res = await fetch('/api/export/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, filename, payload })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.ticket) {
+      throw new Error(data.detail || 'Failed to prepare download ticket');
+    }
+
+    let iframe = document.getElementById('_native_dl_frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = '_native_dl_frame';
+      iframe.style.display = 'none';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+    }
+    iframe.src = '/api/export/download/' + data.ticket;
+    return true;
+  } catch (err) {
+    console.warn('Native server download failed, falling back:', err);
+    return false;
+  }
+}
+
 function downloadQuickBlob(blob, filename, mimeType) {
   let finalName = (filename || 'download.bin').trim();
   // Strip characters forbidden on Windows filesystems
@@ -6144,14 +6174,21 @@ function downloadQuickBlob(blob, filename, mimeType) {
     blob = new Blob([blob], { type: mimeType });
   }
 
-  const url = URL.createObjectURL(blob);
+  let file;
+  try {
+    file = new File([blob], finalName, { type: mimeType || 'application/octet-stream' });
+  } catch (_) {
+    file = new Blob([blob], { type: mimeType || 'application/octet-stream' });
+  }
+
+  const url = URL.createObjectURL(file);
   const a = document.createElement('a');
   a.style.display = 'none';
   a.href = url;
   a.download = finalName;
   a.setAttribute('download', finalName);
   document.body.appendChild(a);
-  a.click();
+  a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
   
   // Retain object URL for 60 seconds so Windows / Chromium download daemon completes writing to disk
   setTimeout(() => {
@@ -6231,19 +6268,22 @@ async function exportInteractiveHtmlReport() {
       theme: currentTheme || 'dark',
       lang: currentLang || 'ar'
     };
-    const res = await fetch('/api/export/report/html', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'HTML export failed');
-    }
-    const htmlText = await res.text();
-    const blob = new Blob([htmlText], { type: 'text/html;charset=utf-8' });
     const filename = getCleanWorkspaceFilename('ERD_Interactive_Report', 'html');
-    downloadQuickBlob(blob, filename, 'text/html;charset=utf-8');
+    const ok = await downloadViaNativeServer('html', payload, filename);
+    if (!ok) {
+      const res = await fetch('/api/export/report/html', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'HTML export failed');
+      }
+      const htmlText = await res.text();
+      const blob = new Blob([htmlText], { type: 'text/html;charset=utf-8' });
+      downloadQuickBlob(blob, filename, 'text/html;charset=utf-8');
+    }
     showToast(isRTL ? '✅ تم تنزيل تقرير HTML التفاعلي المستقل بنجاح' : '✅ Offline HTML report downloaded successfully');
   } catch (err) {
     showToast('❌ ' + err.message);
@@ -6294,19 +6334,22 @@ async function exportExecutivePdfReport() {
       dialect: dialect,
       lang: currentLang || 'ar'
     };
-    const res = await fetch('/api/export/report/pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'PDF export failed');
-    }
-    const arrayBuffer = await res.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
     const filename = getCleanWorkspaceFilename('ERD_Executive_Dictionary', 'pdf');
-    downloadQuickBlob(blob, filename, 'application/pdf');
+    const ok = await downloadViaNativeServer('pdf', payload, filename);
+    if (!ok) {
+      const res = await fetch('/api/export/report/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'PDF export failed');
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      downloadQuickBlob(blob, filename, 'application/pdf');
+    }
     showToast(isRTL ? '✅ تم تنزيل وثيقة PDF المعمارية بنجاح' : '✅ Executive PDF report downloaded successfully');
   } catch (err) {
     showToast('❌ ' + err.message);

@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 import uvicorn
 import json
 import hashlib
@@ -157,6 +158,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.endswith(".js") or path.endswith(".html") or path.endswith(".css") or path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # --- Pydantic Models ---
 class StateSaveRequest(BaseModel):
@@ -811,6 +822,127 @@ def export_pdf_report(req: Optional[ReportExportRequest] = Body(None)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {e}")
+
+# --- Native Server-Side Download Ticket System (Guarantees File Extensions via HTTP RFC 6266) ---
+_DOWNLOAD_TICKETS: Dict[str, Dict[str, Any]] = {}
+
+class PrepareDownloadRequest(BaseModel):
+    type: str  # "pdf", "html", "excel", "sql"
+    filename: str
+    payload: Dict[str, Any]
+
+@app.post("/api/export/prepare")
+def prepare_export_download(req: PrepareDownloadRequest):
+    ticket = uuid.uuid4().hex[:16]
+    if len(_DOWNLOAD_TICKETS) > 200:
+        _DOWNLOAD_TICKETS.clear()
+        
+    _DOWNLOAD_TICKETS[ticket] = {
+        "type": req.type,
+        "filename": req.filename,
+        "payload": req.payload,
+        "time": time.time()
+    }
+    return {"success": True, "ticket": ticket, "filename": req.filename}
+
+@app.get("/api/export/download/{ticket}")
+def download_prepared_export(ticket: str):
+    entry = _DOWNLOAD_TICKETS.pop(ticket, None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="تذكرة التنزيل غير صالحة أو منتهية / Download ticket invalid or expired")
+        
+    exp_type = entry.get("type", "pdf")
+    filename = entry.get("filename", "report.bin").strip()
+    payload = entry.get("payload", {})
+    
+    # Strip illegal Windows filename characters
+    filename = re.sub(r'[\<\>\:\"\/\\\|\?\*]', '_', filename).strip()
+
+    # Guarantee correct extension
+    if exp_type == "pdf" and not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+    elif exp_type == "html" and not filename.lower().endswith(".html"):
+        filename += ".html"
+    elif exp_type == "excel" and not filename.lower().endswith(".xlsx"):
+        filename += ".xlsx"
+    elif exp_type == "sql" and not filename.lower().endswith(".sql"):
+        filename += ".sql"
+
+    cached = db.get_cached_schema() or {}
+    tables_data = payload.get("tablesData") or cached.get("tablesData") or {}
+    fk_list = payload.get("fkList") if payload.get("fkList") is not None else (cached.get("fkList") or [])
+    subsystems = payload.get("subsystems")
+    if not subsystems and cached:
+        try:
+            subsystems = subsys.detect_subsystems(tables_data, fk_list).get("subsystems")
+        except Exception:
+            subsystems = None
+    dialect = payload.get("dialect") or cached.get("dialect", "oracle")
+    lang = payload.get("lang") or "ar"
+
+    if exp_type == "pdf":
+        pdf_bytes = report_export.generate_pdf_report(
+            tables_data=tables_data,
+            fk_list=fk_list,
+            subsystems=subsystems,
+            dialect=dialect,
+            lang=lang
+        )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/pdf"
+            }
+        )
+    elif exp_type == "html":
+        positions = payload.get("positions")
+        if not positions:
+            states = db.get_all_table_states()
+            positions = states.get("positions") or {}
+        theme = payload.get("theme", "dark")
+        client_svg = payload.get("clientSvg")
+        html_content = report_export.generate_standalone_html_report(
+            tables_data=tables_data,
+            fk_list=fk_list,
+            positions=positions,
+            subsystems=subsystems,
+            theme=theme,
+            lang=lang,
+            client_svg=client_svg
+        )
+        return Response(
+            content=html_content,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "text/html; charset=utf-8"
+            }
+        )
+    elif exp_type == "excel":
+        xlsx_bytes = datadict_export.build_workbook_bytes(tables_data, fk_list)
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+        )
+    elif exp_type == "sql":
+        script = payload.get("script", "")
+        return Response(
+            content=script.encode("utf-8"),
+            media_type="text/sql; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "text/sql; charset=utf-8"
+            }
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unknown export type")
+
 
 # --- Database Engineering & Audit Endpoints ---
 

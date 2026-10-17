@@ -28,6 +28,7 @@ from app.services import report_export
 from app.services import schema_linter
 from app.services import schema_diff
 from app.services import mock_data
+from app.services import live_migration
 
 # Initialize SQLite Database
 db.init_db()
@@ -1014,6 +1015,100 @@ def mock_data_endpoint(req: Optional[MockDataRequest] = Body(None)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Mock data generation failed: {e}")
+
+
+# --- Live Database Migration & Dry-Run Runner Endpoints ---
+
+class MigrationRunRequest(BaseModel):
+    sqlScript: str
+    dialect: Optional[str] = "oracle"
+    params: Optional[Dict[str, Any]] = None
+    dryRun: Optional[bool] = True
+    confirm: Optional[bool] = False
+
+@app.post("/api/migration/run")
+def run_migration_endpoint(req: MigrationRunRequest):
+    if not req.sqlScript or not req.sqlScript.strip():
+        raise HTTPException(status_code=400, detail="SQL script is empty")
+
+    # Safety guard: require explicit confirmation if destructive statements exist in live execution
+    if not req.dryRun and not req.confirm:
+        stmts = live_migration.split_sql_statements(req.sqlScript)
+        destructives = [
+            live_migration.inspect_statement(s)
+            for s in stmts
+            if live_migration.inspect_statement(s).get("isDestructive")
+        ]
+        if destructives:
+            raise HTTPException(
+                status_code=400,
+                detail=f"السكربت يحتوي على {len(destructives)} عمليات مدمرة (DROP/TRUNCATE/DELETE). يرجى تأكيد التنفيذ صراحة."
+            )
+
+    try:
+        res = live_migration.execute_migration(
+            dialect=req.dialect or "oracle",
+            params=req.params,
+            sql_script=req.sqlScript,
+            dry_run=bool(req.dryRun)
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Migration execution failed: {e}")
+
+@app.get("/api/migration/targets")
+def get_migration_targets_endpoint():
+    try:
+        settings = db.get_all_settings()
+        cached = db.get_cached_schema() or {}
+        active_dialect = (settings.get("db_dialect") or "oracle").lower()
+
+        oracle_dsn = settings.get("oracle_dsn") or f"{settings.get('db_host', 'localhost')}:{settings.get('db_port', 1521)}/{settings.get('db_service', 'orclpdb')}"
+        oracle_user = settings.get("oracle_user") or settings.get("db_user", "TESTR")
+
+        targets = [
+            {
+                "dialect": "oracle",
+                "label": f"Oracle DB ({oracle_user}@{oracle_dsn})",
+                "host": settings.get("db_host", "localhost"),
+                "port": settings.get("db_port", "1521"),
+                "service": settings.get("db_service", "orclpdb"),
+                "user": oracle_user,
+                "dsn": oracle_dsn,
+                "isDefault": (active_dialect == "oracle")
+            },
+            {
+                "dialect": "sqlite",
+                "label": f"SQLite ({settings.get('db_file', 'erd_studio.db') or 'Local Application DB'})",
+                "dbFile": settings.get("db_file", "erd_studio.db"),
+                "isDefault": (active_dialect in ("sqlite", "sqlite_file"))
+            },
+            {
+                "dialect": "postgres",
+                "label": f"PostgreSQL ({settings.get('db_user', 'postgres')}@{settings.get('db_host', 'localhost')})",
+                "host": settings.get("db_host", "localhost"),
+                "port": settings.get("db_port", "5432"),
+                "user": settings.get("db_user", "postgres"),
+                "isDefault": (active_dialect in ("postgres", "postgresql"))
+            },
+            {
+                "dialect": "mysql",
+                "label": f"MySQL ({settings.get('db_user', 'root')}@{settings.get('db_host', 'localhost')})",
+                "host": settings.get("db_host", "localhost"),
+                "port": settings.get("db_port", "3306"),
+                "user": settings.get("db_user", "root"),
+                "isDefault": (active_dialect == "mysql")
+            }
+        ]
+
+        return {
+            "activeDialect": active_dialect,
+            "cachedSchemaSource": cached.get("source"),
+            "targets": targets
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/settings/test-db")
 def test_oracle_connection(req: DbTestRequest):

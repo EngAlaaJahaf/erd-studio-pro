@@ -2406,6 +2406,31 @@ function applyLanguage(lang) {
     relTag('i18n-filterStd', 'filterStd');
     relTag('i18n-btnGovPdf', 'btnGovPdf');
     relTag('i18n-btnGovHtml', 'btnGovHtml');
+    relTag('i18n-btnDryRunRem', 'btnDryRunRem');
+    relTag('i18n-btnExecRem', 'btnExecRem');
+    relTag('i18n-btnDryRunDiff', 'btnDryRunDiff');
+    relTag('i18n-btnExecDiff', 'btnExecDiff');
+
+    const isArLang = (lang === 'ar');
+    const setTextIf = (id, arT, enT) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = isArLang ? arT : enT;
+    };
+    setTextIf('i18n-btnDryRunRem', '🛡️ محاكاة المعالجة (Dry-Run)', '🛡️ Simulate Fix (Dry-Run)');
+    setTextIf('i18n-btnExecRem', '🚀 تطبيق على DB', '🚀 Apply to DB');
+    setTextIf('i18n-btnDryRunDiff', '🛡️ محاكاة (Dry-Run)', '🛡️ Simulate (Dry-Run)');
+    setTextIf('i18n-btnExecDiff', '🚀 تنفيذ حي (Execute)', '🚀 Execute Live');
+    setTextIf('i18n-migRunnerTitle', 'محرك تنفيذ الترحيل التجريبي للبيانات الحية (Live DB Migration & Dry-Run Runner)', 'Live DB Migration & Safe Dry-Run Runner');
+    setTextIf('i18n-migRunnerSub', 'فحص ومحاكاة آمنة (0 تغييرات) وتنفيذ حقيقي مع فحص المخاطر ومراقبة زمن الاستجابة لكل تعليمة', 'Safe Dry-Run simulation (zero mutations) & live execution with risk inspection and latency tracking');
+    setTextIf('i18n-lblTargetDb', 'قاعدة البيانات:', 'Target Database:');
+    setTextIf('i18n-modeDryRunText', '🛡️ محاكاة تجريبية (Dry-Run)', '🛡️ Safe Dry-Run');
+    setTextIf('i18n-modeLiveText', '🚀 تنفيذ فعلي حي (Execute)', '🚀 Live Execute');
+    setTextIf('i18n-lblScriptPreview', 'كود SQL المراد تنفيذه أو محاكاته:', 'SQL Script to Execute or Simulate:');
+    setTextIf('i18n-lblTimelineTitle', 'سجل المحاكاة والتنفيذ التفاعلي (Execution Timeline):', 'Interactive Execution Timeline:');
+    setTextIf('i18n-migConfirmTitle', 'تأكيد تفويض التنفيذ الحي على قاعدة البيانات الحية (Live DDL Execution)', 'Confirm Live DDL Execution Authorization');
+    setTextIf('i18n-migConfirmDesc', 'أؤكد أنني أمتلك الصلاحيات الإدارية وأتحمل مسؤولية تطبيق أوامر DDL مباشرة على الخادم الحي.', 'I confirm administrative authorization and accept responsibility for executing DDL directly against the live server.');
+    setTextIf('i18n-btnMigClose', 'إغلاق', 'Close');
+
     relTag('i18n-spotlightBtn', 'spotlightBtn');
     if (document.getElementById('spotlightInput') && t.spotlightPlaceholder) {
       document.getElementById('spotlightInput').placeholder = t.spotlightPlaceholder;
@@ -5525,6 +5550,7 @@ function setupKeyboardShortcuts() {
       toggleNewPageModal(false);
       togglePasteSqlModal(false);
       closeRelationshipModal();
+      closeLiveMigrationModal();
     }
 
     // 3. Undo: Ctrl + Z / Cmd + Z (without Shift)
@@ -7327,6 +7353,8 @@ async function runSchemaLint(silent) {
     const badge = document.getElementById('linterGradeBadge');
     const title = document.getElementById('linterRatingTitle');
     const remBtn = document.getElementById('btnDownloadRemediation');
+    const dryRemBtn = document.getElementById('btnDryRunRemediation');
+    const execRemBtn = document.getElementById('btnExecuteRemediation');
     const fixAllBtn = document.getElementById('btnQuickFixAll');
 
     if (circle) {
@@ -7358,10 +7386,11 @@ async function runSchemaLint(silent) {
       if (el) el.textContent = cats[c] || 0;
     });
 
-    // Show/hide download remediation button
-    if (remBtn) {
-      remBtn.style.display = (data.findings && data.findings.length > 0) ? 'inline-flex' : 'none';
-    }
+    // Show/hide download & live migration buttons
+    const hasFindings = Boolean(data.findings && data.findings.length > 0);
+    if (remBtn) remBtn.style.display = hasFindings ? 'inline-flex' : 'none';
+    if (dryRemBtn) dryRemBtn.style.display = hasFindings ? 'inline-flex' : 'none';
+    if (execRemBtn) execRemBtn.style.display = hasFindings ? 'inline-flex' : 'none';
 
     // Auto-Fix All Button
     const fixableCount = (data.findings || []).filter(f => f.canQuickFix !== false && !f.fixed).length;
@@ -7956,14 +7985,18 @@ async function runSchemaDiff() {
     const srcSchema = resolveSchemaFromOption(srcVal);
     const tgtSchema = resolveSchemaFromOption(tgtVal);
 
-    if (!srcSchema.tablesData || Object.keys(srcSchema.tablesData).length === 0) {
-      showToast(isRTL ? '⚠️ المخطط الأساسي فارغ ولا يحتوي على جداول' : '⚠️ Source schema is empty');
+    const srcHasTables = Boolean(srcSchema.tablesData && Object.keys(srcSchema.tablesData).length > 0);
+    const tgtHasTables = Boolean(tgtSchema.tablesData && Object.keys(tgtSchema.tablesData).length > 0);
+
+    if (!srcHasTables && !tgtHasTables) {
+      showToast(isRTL ? '⚠️ كلا المخططين فارغان ولا يحتويان على جداول للمقارنة' : '⚠️ Both schemas are empty');
       return;
     }
-    if (!tgtSchema.tablesData || Object.keys(tgtSchema.tablesData).length === 0) {
-      showToast(isRTL ? '⚠️ المخطط المستهدف فارغ ولا يحتوي على جداول' : '⚠️ Target schema is empty');
-      return;
-    }
+
+    if (!srcSchema.tablesData) srcSchema.tablesData = {};
+    if (!srcSchema.fkList) srcSchema.fkList = [];
+    if (!tgtSchema.tablesData) tgtSchema.tablesData = {};
+    if (!tgtSchema.fkList) tgtSchema.fkList = [];
 
     showToast(isRTL ? '⏳ جاري حساب الفروقات وتوليد سكربتات الترقية...' : '⏳ Comparing schemas & generating migration...');
 
@@ -8147,6 +8180,362 @@ function downloadMigrationScript() {
   const blob = new Blob([editor.value], { type: 'text/sql;charset=utf-8;' });
   downloadQuickBlob(blob, prefix + '_' + dialect + '_' + Date.now() + '.sql');
   showToast(currentLang === 'ar' ? '💾 تم تنزيل السكربت' : '💾 Script downloaded');
+}
+
+// ------------------------- LIVE DB MIGRATION & DRY-RUN RUNNER -------------------------
+
+let currentMigrationTargets = [];
+let migrationIsDryRun = true;
+let migrationActiveSource = 'diff'; // 'diff' or 'linter'
+let isMigrationRunning = false;
+
+async function launchMigrationRunnerModal(sourceType, defaultDryRun = true) {
+  const isRTL = currentLang === 'ar';
+  migrationActiveSource = sourceType || 'diff';
+  migrationIsDryRun = Boolean(defaultDryRun);
+
+  let sqlText = '';
+  if (migrationActiveSource === 'linter') {
+    if (currentLintResults && currentLintResults.remediationScript) {
+      sqlText = currentLintResults.remediationScript;
+    } else {
+      showToast(isRTL ? '⚠️ لا يتوفر سكربت معالجة حالياً. يرجى تشغيل فحص المخطط أولاً.' : '⚠️ No remediation script available. Run linter first.');
+      return;
+    }
+  } else {
+    const editor = document.getElementById('migrationCodeEditor');
+    sqlText = (editor ? editor.value : '') || '';
+    if (!sqlText || sqlText.startsWith('-- No')) {
+      showToast(isRTL ? '⚠️ لا توجد أوامر ترحيل لتنفيذها.' : '⚠️ No migration script available.');
+      return;
+    }
+  }
+
+  const modal = document.getElementById('modalLiveMigrationRunner');
+  const sqlEditor = document.getElementById('migSqlEditor');
+  if (sqlEditor) sqlEditor.value = sqlText;
+
+  // Reset confirmation checkbox
+  const confirmCb = document.getElementById('migConfirmCheckbox');
+  if (confirmCb) confirmCb.checked = false;
+
+  // Set mode
+  setMigrationMode(migrationIsDryRun);
+
+  // Update statement count
+  updateStatementCountBadge();
+
+  // Reset timeline container
+  resetMigrationTimeline();
+
+  // Fetch targets
+  await loadMigrationTargets();
+
+  if (modal) modal.style.display = 'flex';
+
+  // Check destructive operations
+  inspectScriptDestructiveness(sqlText);
+}
+
+function closeLiveMigrationModal() {
+  const modal = document.getElementById('modalLiveMigrationRunner');
+  if (modal) modal.style.display = 'none';
+}
+
+function setMigrationMode(isDryRun) {
+  migrationIsDryRun = Boolean(isDryRun);
+  const isRTL = currentLang === 'ar';
+  const btnDry = document.getElementById('btnModeDryRun');
+  const btnLive = document.getElementById('btnModeLive');
+  const confirmSection = document.getElementById('migLiveConfirmationSection');
+  const actionBtn = document.getElementById('btnRunMigrationAction');
+  const actionText = document.getElementById('btnRunMigrationActionText');
+
+  if (btnDry && btnLive) {
+    if (migrationIsDryRun) {
+      btnDry.classList.add('active');
+      btnDry.style.background = 'var(--accent, #3b82f6)';
+      btnDry.style.color = '#fff';
+      btnLive.classList.remove('active');
+      btnLive.style.background = 'transparent';
+      btnLive.style.color = 'var(--text-muted)';
+      if (confirmSection) confirmSection.style.display = 'none';
+      if (actionBtn) {
+        actionBtn.className = 'btn-tool btn-sm primary';
+        actionBtn.disabled = false;
+      }
+      if (actionText) actionText.textContent = isRTL ? '🛡️ بدء المحاكاة التجريبية (Dry-Run)' : '🛡️ Run Safe Dry-Run Simulation';
+    } else {
+      btnLive.classList.add('active');
+      btnLive.style.background = '#ef4444';
+      btnLive.style.color = '#fff';
+      btnDry.classList.remove('active');
+      btnDry.style.background = 'transparent';
+      btnDry.style.color = 'var(--text-muted)';
+      if (confirmSection) confirmSection.style.display = 'block';
+      if (actionBtn) {
+        actionBtn.className = 'btn-tool btn-sm danger';
+        const cb = document.getElementById('migConfirmCheckbox');
+        actionBtn.disabled = !(cb && cb.checked);
+      }
+      if (actionText) actionText.textContent = isRTL ? '🚀 تطبيق الترحيل الحي على DB' : '🚀 Apply Live DB Migration';
+    }
+  }
+
+  const sqlEditor = document.getElementById('migSqlEditor');
+  if (sqlEditor) inspectScriptDestructiveness(sqlEditor.value);
+}
+
+function handleMigrationConfirmCheckbox(checked) {
+  if (!migrationIsDryRun) {
+    const actionBtn = document.getElementById('btnRunMigrationAction');
+    if (actionBtn) actionBtn.disabled = !checked;
+  }
+}
+
+async function loadMigrationTargets() {
+  try {
+    const res = await fetch('/api/migration/targets');
+    if (!res.ok) return;
+    const data = await res.json();
+    currentMigrationTargets = data.targets || [];
+
+    const select = document.getElementById('migTargetSelect');
+    if (!select) return;
+    select.innerHTML = '';
+
+    currentMigrationTargets.forEach(function(t) {
+      const opt = document.createElement('option');
+      opt.value = t.dialect;
+      opt.textContent = (t.isDefault ? '⭐ ' : '') + t.label;
+      if (t.isDefault) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    handleMigrationTargetChange();
+  } catch (err) {
+    console.warn('Failed to load migration targets:', err);
+  }
+}
+
+function handleMigrationTargetChange() {
+  const select = document.getElementById('migTargetSelect');
+  const badge = document.getElementById('migDialectBadge');
+  if (!select) return;
+  const dialect = select.value || 'oracle';
+  if (badge) badge.textContent = dialect.toUpperCase();
+}
+
+function updateStatementCountBadge() {
+  const sqlEditor = document.getElementById('migSqlEditor');
+  const badge = document.getElementById('migStatementCountBadge');
+  const isRTL = currentLang === 'ar';
+  if (!sqlEditor || !badge) return;
+
+  const text = sqlEditor.value || '';
+  const count = parseStatementsRoughCount(text);
+  badge.textContent = count + ' ' + (isRTL ? 'أوامر' : 'statements');
+}
+
+function parseStatementsRoughCount(sqlText) {
+  if (!sqlText || !sqlText.trim()) return 0;
+  const raw = sqlText.split(/;|\n\s*\/\s*\n/);
+  return raw.map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0 && !s.startsWith('--'); }).length;
+}
+
+function inspectScriptDestructiveness(sqlText) {
+  const warnBox = document.getElementById('migDestructiveWarning');
+  if (!warnBox) return;
+
+  const isDestructive = /\b(DROP\s+TABLE|DROP\s+COLUMN|DROP\s+DATABASE|TRUNCATE\s+TABLE|DELETE\s+FROM)\b/i.test(sqlText || '');
+  if (isDestructive) {
+    warnBox.style.display = 'flex';
+  } else {
+    warnBox.style.display = 'none';
+  }
+}
+
+function resetMigrationTimeline() {
+  const container = document.getElementById('migTimelineContainer');
+  const metrics = document.getElementById('migTimelineMetrics');
+  const statusText = document.getElementById('migExecutionStatusText');
+  const isRTL = currentLang === 'ar';
+
+  if (metrics) metrics.innerHTML = '';
+  if (statusText) statusText.textContent = isRTL ? 'جاهز للتشغيل' : 'Ready to run';
+
+  if (container) {
+    container.innerHTML = 
+      '<div class="audit-empty-state" style="margin:auto;">' +
+        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>' +
+        '<div>' + (isRTL ? 'انقر على الزر للبدء بالتحقق ومحاكاة التعليمات البرمجية.' : 'Click Run to begin inspection and simulation.') + '</div>' +
+      '</div>';
+  }
+}
+
+async function executeMigrationAction() {
+  if (isMigrationRunning) return;
+  const isRTL = currentLang === 'ar';
+  const sqlEditor = document.getElementById('migSqlEditor');
+  const select = document.getElementById('migTargetSelect');
+  const statusText = document.getElementById('migExecutionStatusText');
+  const actionBtn = document.getElementById('btnRunMigrationAction');
+  const container = document.getElementById('migTimelineContainer');
+  const metrics = document.getElementById('migTimelineMetrics');
+
+  const sqlScript = (sqlEditor ? sqlEditor.value : '').trim();
+  if (!sqlScript) {
+    showToast(isRTL ? '⚠️ كود SQL فارغ' : '⚠️ SQL script is empty');
+    return;
+  }
+
+  const dialect = (select ? select.value : 'oracle') || 'oracle';
+  const isDryRun = migrationIsDryRun;
+  const confirmCb = document.getElementById('migConfirmCheckbox');
+  const isConfirmed = confirmCb ? confirmCb.checked : false;
+
+  if (!isDryRun && !isConfirmed) {
+    showToast(isRTL ? '⚠️ يجب تأكيد التفويض أولاً لتنفيذ الترحيل الفعلي' : '⚠️ Please check confirmation authorization');
+    return;
+  }
+
+  isMigrationRunning = true;
+  if (actionBtn) {
+    actionBtn.disabled = true;
+    actionBtn.innerHTML = '<span class="spinner-sm" style="display:inline-block; width:13px; height:13px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite;"></span> ' + (isRTL ? 'جاري التشغيل...' : 'Running...');
+  }
+  if (statusText) {
+    statusText.textContent = isDryRun 
+      ? (isRTL ? '⏳ جاري تنفيذ المحاكاة التجريبية (Dry-Run)...' : '⏳ Running safe dry-run simulation...')
+      : (isRTL ? '⚡ جاري تنفيذ أوامر الترحيل على قاعدة البيانات الحية...' : '⚡ Executing migration statements against live database...');
+  }
+
+  if (container) {
+    container.innerHTML = 
+      '<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:var(--text-muted);">' +
+        '<div class="spinner" style="width:28px; height:28px; border:3px solid var(--accent, #3b82f6); border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite;"></div>' +
+        '<div style="font-weight:600; font-size:12.5px;">' + (isDryRun ? (isRTL ? 'جاري محاكاة كل تعليمة وفحص التعارضات...' : 'Simulating statements & verifying catalog...') : (isRTL ? 'جاري إرسال أوامر DDL وتطبيق التعديلات...' : 'Applying DDL statements to database...')) + '</div>' +
+      '</div>';
+  }
+
+  try {
+    const res = await fetch('/api/migration/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sqlScript: sqlScript,
+        dialect: dialect,
+        dryRun: isDryRun,
+        confirm: isConfirmed
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || data.error || 'Execution failed');
+    }
+
+    renderMigrationTimelineResults(data);
+
+    if (data.success) {
+      showToast(isDryRun 
+        ? (isRTL ? '🛡️ اكتملت المحاكاة التجريبية بنجاح دون أية أخطاء!' : '🛡️ Dry-run simulation completed successfully!')
+        : (isRTL ? '🎉 تم تطبيق الترحيل الحي على قاعدة البيانات بنجاح!' : '🎉 Live migration applied to database successfully!'));
+
+      // If live execution succeeded, refresh schema cache and canvas
+      if (!isDryRun) {
+        if (typeof syncSchema === 'function') {
+          syncSchema();
+        } else if (typeof fetchState === 'function') {
+          fetchState();
+        }
+      }
+    } else {
+      showToast(isRTL ? ('❌ حدث خطأ أثناء ' + (isDryRun ? 'المحاكاة' : 'التنفيذ') + ': ' + (data.error || '')) : ('❌ Errors encountered: ' + (data.error || '')));
+    }
+
+  } catch (err) {
+    console.error('executeMigrationAction error:', err);
+    if (container) {
+      container.innerHTML = 
+        '<div class="migration-step-card step-error">' +
+          '<div class="step-head">' +
+            '<span class="step-num">#0</span>' +
+            '<span class="step-action-tag action-destructive">SYSTEM_ERROR</span>' +
+            '<span class="step-status-icon">❌</span>' +
+          '</div>' +
+          '<div class="step-details text-error">' + err.message + '</div>' +
+        '</div>';
+    }
+    if (statusText) statusText.textContent = isRTL ? '❌ فشل الاتصال أو التنفيذ' : '❌ Failed to execute';
+    showToast('❌ ' + err.message);
+  } finally {
+    isMigrationRunning = false;
+    setMigrationMode(migrationIsDryRun);
+  }
+}
+
+function renderMigrationTimelineResults(data) {
+  const container = document.getElementById('migTimelineContainer');
+  const metrics = document.getElementById('migTimelineMetrics');
+  const statusText = document.getElementById('migExecutionStatusText');
+  const isRTL = currentLang === 'ar';
+  if (!container) return;
+
+  const results = data.results || [];
+  const successCount = data.successCount || 0;
+  const errorCount = data.errorCount || 0;
+  const destructiveCount = data.destructiveCount || 0;
+  const totalDuration = data.totalDurationMs || 0;
+
+  // Render top metrics badges
+  if (metrics) {
+    metrics.innerHTML = 
+      '<span style="padding:2px 8px; border-radius:10px; background:rgba(16,185,129,0.15); color:#10b981; font-weight:700;">✅ ' + successCount + ' ' + (isRTL ? 'ناجحة' : 'passed') + '</span>' +
+      (errorCount > 0 ? ('<span style="padding:2px 8px; border-radius:10px; background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700;">❌ ' + errorCount + ' ' + (isRTL ? 'فاشلة' : 'failed') + '</span>') : '') +
+      (destructiveCount > 0 ? ('<span style="padding:2px 8px; border-radius:10px; background:rgba(245,158,11,0.15); color:#f59e0b; font-weight:700;">⚠️ ' + destructiveCount + ' ' + (isRTL ? 'مدمرة' : 'destructive') + '</span>') : '') +
+      '<span style="padding:2px 8px; border-radius:10px; background:var(--bg-card); color:var(--text-muted); font-family:var(--font-mono);">' + totalDuration + 'ms</span>';
+  }
+
+  if (statusText) {
+    if (data.success) {
+      statusText.innerHTML = '<span style="color:#10b981;">✅ ' + (data.dryRun ? (isRTL ? 'المحاكاة سليمة وجاهزة للتنفيذ الحي' : 'Simulation passed, ready for execution') : (isRTL ? 'تم الترحيل والتطبيق الفعلي بنجاح' : 'Migration successfully applied')) + '</span>';
+    } else {
+      statusText.innerHTML = '<span style="color:#ef4444;">❌ ' + (isRTL ? ('تم اكتشاف ' + errorCount + ' أخطاء تحتاج مراجعة') : (errorCount + ' errors found')) + '</span>';
+    }
+  }
+
+  if (results.length === 0) {
+    container.innerHTML = 
+      '<div class="audit-empty-state" style="margin:auto;">' +
+        '<div>' + (data.error || (isRTL ? 'لم يتم استخراج تعليمات صالحة' : 'No statements returned')) + '</div>' +
+      '</div>';
+    return;
+  }
+
+  let html = '';
+  results.forEach(function(r) {
+    const isSuccess = (r.status === 'SUCCESS' || r.status === 'SIMULATED_SUCCESS');
+    const isWarning = (r.status === 'SIMULATED_WARNING');
+    const cardClass = isSuccess ? 'step-success' : (isWarning ? 'step-warning' : 'step-error');
+    const statusIcon = isSuccess ? '✅' : (isWarning ? '⚠️' : '❌');
+    const isDestructive = ['DROP_TABLE', 'ALTER_TABLE_DROP_COLUMN', 'ALTER_TABLE_DROP_CONSTRAINT', 'DROP_INDEX', 'DELETE'].includes(r.action);
+
+    html += 
+      '<div class="migration-step-card ' + cardClass + (isDestructive ? ' step-destructive' : '') + '">' +
+        '<div class="step-head">' +
+          '<span class="step-num">#' + r.index + '</span>' +
+          '<span class="step-action-tag' + (isDestructive ? ' action-destructive' : '') + '">' + r.action + '</span>' +
+          (r.targetTable ? ('<span class="step-table-tag">📋 ' + r.targetTable + '</span>') : '') +
+          '<span class="step-dur">' + (r.durationMs || 0) + 'ms</span>' +
+          '<span class="step-status-icon">' + statusIcon + '</span>' +
+        '</div>' +
+        '<div class="step-details' + (!isSuccess && !isWarning ? ' text-error' : '') + '">' + (r.details || (r.error || '')) + '</div>' +
+        (r.statement ? ('<div class="step-sql-snippet"><code>' + _escapeHtml(r.statement) + '</code></div>') : '') +
+      '</div>';
+  });
+
+  container.innerHTML = html;
 }
 
 // ------------------------- 3. SMART MOCK DATA GENERATOR -------------------------

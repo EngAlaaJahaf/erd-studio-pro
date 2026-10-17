@@ -165,6 +165,8 @@ const i18n = {
     filterSec: "أمان PII",
     filterPerf: "أداء وفهارس",
     filterStd: "معايير",
+    btnGovPdf: "تقرير الامتثال (PDF)",
+    btnGovHtml: "تقرير تفاعلي (HTML)",
     spotlightBtn: "بحث سريع...",
     spotlightPlaceholder: "ابحث في الجداول، الحقول، الأنواع، الأنظمة... [Ctrl+K]",
     aiTitle: "المساعد الذكي",
@@ -323,6 +325,8 @@ const i18n = {
     filterSec: "Security & PII",
     filterPerf: "Performance",
     filterStd: "Standards",
+    btnGovPdf: "Compliance Report (PDF)",
+    btnGovHtml: "Interactive Report (HTML)",
     spotlightBtn: "Search...",
     spotlightPlaceholder: "Search tables, columns, types, subsystems... [Ctrl+K]",
     aiTitle: "Smart Assistant",
@@ -2400,6 +2404,8 @@ function applyLanguage(lang) {
     relTag('i18n-filterSec', 'filterSec');
     relTag('i18n-filterPerf', 'filterPerf');
     relTag('i18n-filterStd', 'filterStd');
+    relTag('i18n-btnGovPdf', 'btnGovPdf');
+    relTag('i18n-btnGovHtml', 'btnGovHtml');
     relTag('i18n-spotlightBtn', 'spotlightBtn');
     if (document.getElementById('spotlightInput') && t.spotlightPlaceholder) {
       document.getElementById('spotlightInput').placeholder = t.spotlightPlaceholder;

@@ -248,6 +248,173 @@ def generate_pdf_report(tables_data: Dict[str, Any], fk_list: list,
         "attributes, integrity constraints, and documentation comments."
     )
     story.append(Paragraph(_ar(intro_p), body_style))
+
+    # --- SECTION 1: EXECUTIVE GOVERNANCE & COMPLIANCE ASSESSMENT ---
+    try:
+        from app.services import schema_linter
+        audit_data = schema_linter.audit_schema(tables_data, fk_list, dialect=dialect)
+    except Exception:
+        audit_data = None
+
+    if audit_data:
+        story.append(PageBreak())
+        story.append(Paragraph(_ar("تقييم الامتثال والحوكمة المعمارية المؤسسية" if is_ar else "Executive Architecture Governance & Compliance Assessment"), section_h1))
+        story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0284c7"), spaceAfter=14))
+
+        score = audit_data.get("score", 100)
+        grade = audit_data.get("grade", "A+")
+        rating_text = audit_data.get("rating_ar" if is_ar else "rating_en", "")
+        counts = audit_data.get("counts", {})
+        categories = audit_data.get("categories", {})
+        findings = audit_data.get("findings", [])
+
+        grade_color = "#10b981" if score >= 85 else ("#f59e0b" if score >= 60 else "#ef4444")
+
+        # Executive Score Callout Box
+        score_box_data = [
+            [
+                Paragraph(_ar("مؤشر جودة وحوكمة المخطط" if is_ar else "Schema Health & Governance Index"), th_style),
+                Paragraph(_ar("التقييم المؤسسي المعياري" if is_ar else "Enterprise Compliance Rating"), th_style),
+                Paragraph(_ar("إجمالي الملاحظات والفرص" if is_ar else "Total Findings / Risks"), th_style),
+            ],
+            [
+                Paragraph(f"<font size=20 color='{grade_color}'><b>{score} / 100</b></font><br/><font size=10 color='#64748b'><b>Grade: {grade}</b></font>", ParagraphStyle("ScoreVal", fontName=_FONT_BOLD, alignment=1)),
+                Paragraph(f"<font size=11 color='#0f172a'><b>{_ar(rating_text)}</b></font><br/><font size=8 color='#64748b'>{_ar('فحص شامل لسلامة المفاتيح، حوكمة البيانات، كشف PII، والفهارس' if is_ar else 'Deep audit of PK/FK integrity, audit columns, PII, and unindexed FKs')}</font>", ParagraphStyle("RatingVal", fontName=_FONT_NAME, alignment=1)),
+                Paragraph(f"<font size=11 color='#ef4444'><b>{counts.get('critical', 0)} " + _ar("أخطاء حرجة" if is_ar else "Critical") + f"</b></font><br/><font size=10 color='#f59e0b'><b>{counts.get('warning', 0)} " + _ar("تحذيرات" if is_ar else "Warnings") + f"</b></font><br/><font size=9.5 color='#0284c7'><b>{counts.get('info', 0)} " + _ar("توصيات" if is_ar else "Info") + f"</b></font>", ParagraphStyle("CntsVal", fontName=_FONT_BOLD, alignment=1)),
+            ]
+        ]
+        t_score_box = Table(score_box_data, colWidths=[160, 200, 140])
+        t_score_box.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#f8fafc")),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#cbd5e1")),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        story.append(t_score_box)
+        story.append(Spacer(1, 14))
+
+        # 5 Enterprise Governance Pillars Breakdown
+        story.append(Paragraph(_ar("أبعاد الحوكمة والامتثال المعماري الخمسة" if is_ar else "The 5 Enterprise Governance & Architecture Pillars"), table_h2))
+
+        pillar_rows = [
+            [
+                Paragraph(_ar("البُعد المعماري" if is_ar else "Governance Dimension"), th_style),
+                Paragraph(_ar("نطاق الفحص والمعايير" if is_ar else "Audit Scope & Standards"), th_style),
+                Paragraph(_ar("الملاحظات" if is_ar else "Findings"), th_style),
+                Paragraph(_ar("مستوى الامتثال" if is_ar else "Compliance Level"), th_style),
+            ],
+            [
+                Paragraph(_ar("سلامة وهيكلة البيانات (Integrity)" if is_ar else "Schema Integrity"), body_style),
+                Paragraph(_ar("وجود مفاتيح أساسية PK، تطابق أنواع FK، وخلو المفاتيح من القيم الفارغة" if is_ar else "Primary Key presence, FK type matching, and non-nullable PK constraints"), body_style),
+                Paragraph(str(categories.get("integrity", 0)), ParagraphStyle("C1", fontName=_FONT_BOLD, alignment=1, textColor=colors.HexColor("#ef4444") if categories.get("integrity", 0) > 0 else colors.HexColor("#10b981"))),
+                Paragraph(_ar("متوافق 100%" if categories.get("integrity", 0) == 0 else "يتطلب إصلاح فوري" if is_ar else ("100% Compliant" if categories.get("integrity", 0) == 0 else "Requires Action")), body_style),
+            ],
+            [
+                Paragraph(_ar("حوكمة وأعمدة التدقيق (Governance)" if is_ar else "Data Governance"), body_style),
+                Paragraph(_ar("حوكمة وتتبع سجلات التعديل والإنشاء المؤسسي (CREATED_AT / UPDATED_AT)" if is_ar else "Enterprise audit trails (CREATED_AT, UPDATED_AT, CREATED_BY, UPDATED_BY)"), body_style),
+                Paragraph(str(categories.get("governance", 0)), ParagraphStyle("C2", fontName=_FONT_BOLD, alignment=1, textColor=colors.HexColor("#8b5cf6") if categories.get("governance", 0) > 0 else colors.HexColor("#10b981"))),
+                Paragraph(_ar("مكتمل وموثق" if categories.get("governance", 0) == 0 else "توصية بالحوكمة" if is_ar else ("Fully Tracked" if categories.get("governance", 0) == 0 else "Audit Gaps Detected")), body_style),
+            ],
+            [
+                Paragraph(_ar("أمان وخصوصية البيانات (Security PII)" if is_ar else "Security & PII"), body_style),
+                Paragraph(_ar("حماية بيانات الاعتماد والهوية الحساسة (GDPR / PCI-DSS / ISO 27001)" if is_ar else "Detection of plaintext credentials, tokens, cards, and sensitive identifiers"), body_style),
+                Paragraph(str(categories.get("security", 0)), ParagraphStyle("C3", fontName=_FONT_BOLD, alignment=1, textColor=colors.HexColor("#ef4444") if categories.get("security", 0) > 0 else colors.HexColor("#10b981"))),
+                Paragraph(_ar("سليم ومحمي" if categories.get("security", 0) == 0 else "مخاطر خصوصية" if is_ar else ("Secure & Protected" if categories.get("security", 0) == 0 else "Sensitive Data Exposed")), body_style),
+            ],
+            [
+                Paragraph(_ar("أداء وتزامن الاستعلامات (Performance)" if is_ar else "Performance"), body_style),
+                Paragraph(_ar("فهرسة أعمدة المفاتيح الخارجية لمنع إقفال الجداول الكامل (Table Lock) في أوراكل" if is_ar else "Indexing of Foreign Key columns to prevent full table share locks in Oracle"), body_style),
+                Paragraph(str(categories.get("performance", 0)), ParagraphStyle("C4", fontName=_FONT_BOLD, alignment=1, textColor=colors.HexColor("#f59e0b") if categories.get("performance", 0) > 0 else colors.HexColor("#10b981"))),
+                Paragraph(_ar("أداء عالي" if categories.get("performance", 0) == 0 else "فهارس مفقودة" if is_ar else ("Optimized" if categories.get("performance", 0) == 0 else "Missing Indexes")), body_style),
+            ],
+            [
+                Paragraph(_ar("المعايير والتوافقية (Standards)" if is_ar else "Standards"), body_style),
+                Paragraph(_ar("عدم استخدام الكلمات المحجوزة في SQL، وتوافق أطوال أسماء الكائنات (30 حرفاً)" if is_ar else "Avoidance of reserved SQL keywords and identifier length limits"), body_style),
+                Paragraph(str(categories.get("standards", 0)), ParagraphStyle("C5", fontName=_FONT_BOLD, alignment=1, textColor=colors.HexColor("#0284c7") if categories.get("standards", 0) > 0 else colors.HexColor("#10b981"))),
+                Paragraph(_ar("مطابق للمعايير" if categories.get("standards", 0) == 0 else "تحسينات ترميز" if is_ar else ("Standard-Compliant" if categories.get("standards", 0) == 0 else "Naming Warnings")), body_style),
+            ],
+        ]
+
+        t_pillars = Table(pillar_rows, colWidths=[130, 210, 50, 110])
+        t_pillars.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#cbd5e1")),
+            ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t_pillars)
+        story.append(Spacer(1, 14))
+
+        # Top Priority Action Items & Remediation Table
+        if findings:
+            story.append(Paragraph(_ar("خطة العمل والمعالجة المعمارية ذات الأولوية" if is_ar else "Priority Architectural Remediation Action Plan"), table_h2))
+            
+            action_rows = [
+                [
+                    Paragraph(_ar("#"), th_style),
+                    Paragraph(_ar("الخطورة" if is_ar else "Severity"), th_style),
+                    Paragraph(_ar("الجدول / الحقل" if is_ar else "Target Object"), th_style),
+                    Paragraph(_ar("الملاحظة والتأثير المعماري" if is_ar else "Issue & Architectural Impact"), th_style),
+                    Paragraph(_ar("أمر المعالجة المقترح (DDL Remediation)" if is_ar else "Remediation Script (DDL)"), th_style),
+                ]
+            ]
+
+            sql_code_style = ParagraphStyle(
+                "SqlCode",
+                fontName="Courier",
+                fontSize=6.5,
+                leading=8,
+                textColor=colors.HexColor("#0284c7")
+            )
+
+            for idx, f in enumerate(findings[:12], 1):
+                sev = f.get("severity", "INFO")
+                sev_color = "#ef4444" if sev == "CRITICAL" else ("#f59e0b" if sev == "WARNING" else "#38bdf8")
+
+                target_name = f.get("table", "")
+                if f.get("column"):
+                    target_name += f".{f['column']}"
+
+                issue_text = f"<b>{_ar(f.get('title_ar' if is_ar else 'title_en', ''))}</b>"
+                if f.get("impact"):
+                    issue_text += f"<br/><font size=7 color='#64748b'><b>" + _ar("الأثر:" if is_ar else "Impact:") + f"</b> {_ar(f['impact'])}</font>"
+
+                fix_sql = f.get("fixSql", "-")
+                if len(fix_sql) > 130:
+                    fix_sql = fix_sql[:125] + "..."
+
+                action_rows.append([
+                    Paragraph(str(idx), body_style),
+                    Paragraph(f"<font color='{sev_color}'><b>{sev}</b></font>", ParagraphStyle("Sev", fontName=_FONT_BOLD, alignment=1)),
+                    Paragraph(f"<b>{target_name}</b>", body_style),
+                    Paragraph(issue_text, body_style),
+                    Paragraph(fix_sql, sql_code_style),
+                ])
+
+            t_actions = Table(action_rows, colWidths=[18, 52, 105, 185, 140])
+            t_actions.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor("#cbd5e1")),
+                ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            story.append(t_actions)
+            story.append(Spacer(1, 14))
+
     story.append(PageBreak())
 
     # --- SECTION 2: DATA DICTIONARY TABLES ---
@@ -350,12 +517,20 @@ def generate_standalone_html_report(tables_data: Dict[str, Any], fk_list: list,
             positions[t] = {"x": col * 340 + 60, "y": row * 280 + 60, "width": 280, "height": 180}
             idx += 1
 
+    # Compute Architecture & Governance Audit
+    try:
+        from app.services import schema_linter
+        audit_data = schema_linter.audit_schema(tables_data, fk_list, dialect="oracle")
+    except Exception:
+        audit_data = None
+
     # Format JSON payload safely embedded inside HTML
     schema_payload_json = json.dumps({
         "tablesData": tables_data,
         "fkList": fk_list,
         "positions": positions,
         "subsystems": subsystems_data,
+        "auditData": audit_data,
         "theme": theme,
         "lang": lang,
         "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -797,14 +972,105 @@ body {{
 .badge.pk {{ background: rgba(167, 139, 250, 0.18); color: var(--purple); border: 1px solid var(--purple); }}
 .badge.fk {{ background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }}
 
+/* Executive Governance Section */
+.gov-section-card {{
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}}
+.gov-section-header {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 14px;
+}}
+.gov-score-badge {{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 20px;
+}}
+.gov-grade-pill {{
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 10px;
+}}
+.gov-filters-bar {{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}}
+.gov-findings-list {{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}}
+.gov-finding-card {{
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s;
+}}
+.gov-finding-card:hover {{
+  border-color: var(--accent);
+}}
+.gov-finding-card.sev-critical {{ border-inline-start: 4px solid #ef4444; }}
+.gov-finding-card.sev-warning {{ border-inline-start: 4px solid #f59e0b; }}
+.gov-finding-card.sev-info {{ border-inline-start: 4px solid #38bdf8; }}
+.gov-finding-header {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}}
+.gov-tag {{
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}}
+.gov-tag.critical {{ background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
+.gov-tag.warning {{ background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+.gov-tag.info {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }}
+.gov-sql-box {{
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-x: auto;
+  color: var(--accent);
+}}
+
 /* Print Rules */
 @media print {{
   .report-header, .canvas-toolbar, .filter-bar, .canvas-tools, .canvas-viewport, .canvas-hud {{
     display: none !important;
   }}
   body {{ background: #fff !important; color: #000 !important; }}
-  .table-card {{ page-break-inside: avoid; border: 1px solid #ccc !important; margin-bottom: 16px; box-shadow: none !important; }}
-  .table-head {{ background: #f0f0f0 !important; }}
+  .table-card, .gov-section-card {{ page-break-inside: avoid; border: 1px solid #ccc !important; margin-bottom: 16px; box-shadow: none !important; }}
+  .table-head, .gov-section-header {{ background: #f0f0f0 !important; }}
   .badge.pk {{ color: #000 !important; border: 1px solid #000 !important; }}
   .badge.fk {{ color: #000 !important; border: 1px solid #000 !important; }}
 }}
@@ -841,6 +1107,12 @@ body {{
     <div class="stat-card">
       <span class="stat-label">{'علاقات المفاتيح الخارجية' if is_ar else 'Foreign Key Relations'}</span>
       <span class="stat-num">{len(fk_list)}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">{'مؤشر الامتثال والحوكمة' if is_ar else 'Governance Health'}</span>
+      <span class="stat-num" style="color:{'#10b981' if (audit_data and audit_data.get('score', 100) >= 80) else ('#f59e0b' if (audit_data and audit_data.get('score', 100) >= 60) else '#ef4444')}; font-size:22px;">
+        {f"{audit_data.get('score', 100)}/100 ({audit_data.get('grade', 'A+')})" if audit_data else '100/100 (A+)'}
+      </span>
     </div>
     <div class="stat-card">
       <span class="stat-label">{'تاريخ التوليد' if is_ar else 'Generated On'}</span>
@@ -893,6 +1165,41 @@ body {{
     <div class="filter-chips" id="chipsContainer">
       <button class="chip active" onclick="filterSubsystem('all', this)">{'الكل' if is_ar else 'All'} ({len(tables_data)})</button>
     </div>
+  </div>
+
+  <!-- Executive Governance & Compliance Section -->
+  <div class="gov-section-card" id="govSectionCard">
+    <div class="gov-section-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:22px;">🛡️</span>
+        <div>
+          <div style="font-size:16px; font-weight:800;">{'تقييم الامتثال والحوكمة المعمارية المؤسسية' if is_ar else 'Executive Architecture Governance & Compliance Assessment'}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">{'فحص آلي مؤسسي: حوكمة أعمدة التدقيق (Audit Columns)، كشف بيانات PII الحساسة، فهارس المفاتيح الخارجية، وتوافق المعايير' if is_ar else 'Deep automated audit: Enterprise audit columns, sensitive PII credentials, unindexed FKs, and standards'}</div>
+        </div>
+      </div>
+      <div class="gov-score-badge" id="govScoreBadge">
+        <span style="font-size:18px; font-weight:800;" id="govScoreNum">{audit_data.get('score', 100) if audit_data else 100}/100</span>
+        <span class="gov-grade-pill" id="govGradePill" style="background:{'rgba(16,185,129,0.15)' if (audit_data and audit_data.get('score', 100) >= 80) else ('rgba(245,158,11,0.15)' if (audit_data and audit_data.get('score', 100) >= 60) else 'rgba(239,68,68,0.15)')}; color:{'#10b981' if (audit_data and audit_data.get('score', 100) >= 80) else ('#f59e0b' if (audit_data and audit_data.get('score', 100) >= 60) else '#f87171')};">{audit_data.get('grade', 'A+') if audit_data else 'A+'}</span>
+      </div>
+    </div>
+
+    <!-- Governance Filter Chips -->
+    <div class="gov-filters-bar">
+      <div class="filter-chips" id="govChipsContainer">
+        <button class="chip active" data-gov-filter="all" onclick="filterGovFindings('all', this)">{'الكل' if is_ar else 'All'} (<span id="govCountAll">0</span>)</button>
+        <button class="chip" data-gov-filter="CRITICAL" onclick="filterGovFindings('CRITICAL', this)">{'أخطاء حرجة' if is_ar else 'Critical'} (<span id="govCountCrit">0</span>)</button>
+        <button class="chip" data-gov-filter="WARNING" onclick="filterGovFindings('WARNING', this)">{'تحذيرات' if is_ar else 'Warnings'} (<span id="govCountWarn">0</span>)</button>
+        <button class="chip" data-gov-filter="INFO" onclick="filterGovFindings('INFO', this)">{'توصيات' if is_ar else 'Info'} (<span id="govCountInfo">0</span>)</button>
+        <span style="display:inline-block; width:1px; height:18px; background:var(--border); margin:0 4px; vertical-align:middle;"></span>
+        <button class="chip" data-gov-filter="governance" onclick="filterGovFindings('governance', this)">⚖️ {'حوكمة' if is_ar else 'Governance'} (<span id="govCountGov">0</span>)</button>
+        <button class="chip" data-gov-filter="security" onclick="filterGovFindings('security', this)">🔒 {'أمان PII' if is_ar else 'Security PII'} (<span id="govCountSec">0</span>)</button>
+        <button class="chip" data-gov-filter="performance" onclick="filterGovFindings('performance', this)">⚡ {'أداء وفهارس' if is_ar else 'Performance'} (<span id="govCountPerf">0</span>)</button>
+        <button class="chip" data-gov-filter="standards" onclick="filterGovFindings('standards', this)">📐 {'معايير' if is_ar else 'Standards'} (<span id="govCountStd">0</span>)</button>
+      </div>
+    </div>
+
+    <!-- Findings Container -->
+    <div class="gov-findings-list" id="govFindingsList"></div>
   </div>
 
   <!-- Detailed Data Dictionary -->
@@ -1596,10 +1903,100 @@ function handleSearch(q) {{
   if (hudTables) hudTables.textContent = visibleCount;
 }}
 
+// Governance Rendering & Filtering
+let activeGovFilter = 'all';
+
+function renderGovernanceReport() {{
+  const audit = MODEL.auditData;
+  if (!audit) return;
+
+  const countAll = document.getElementById('govCountAll');
+  const countCrit = document.getElementById('govCountCrit');
+  const countWarn = document.getElementById('govCountWarn');
+  const countInfo = document.getElementById('govCountInfo');
+  const countGov = document.getElementById('govCountGov');
+  const countSec = document.getElementById('govCountSec');
+  const countPerf = document.getElementById('govCountPerf');
+  const countStd = document.getElementById('govCountStd');
+
+  const counts = audit.counts || {{}};
+  const cats = audit.categories || {{}};
+
+  if (countAll) countAll.textContent = counts.total || 0;
+  if (countCrit) countCrit.textContent = counts.critical || 0;
+  if (countWarn) countWarn.textContent = counts.warning || 0;
+  if (countInfo) countInfo.textContent = counts.info || 0;
+  if (countGov) countGov.textContent = cats.governance || 0;
+  if (countSec) countSec.textContent = cats.security || 0;
+  if (countPerf) countPerf.textContent = cats.performance || 0;
+  if (countStd) countStd.textContent = cats.standards || 0;
+
+  filterGovFindings('all');
+}}
+
+function filterGovFindings(filter, btnElem) {{
+  activeGovFilter = filter;
+  if (btnElem) {{
+    document.querySelectorAll('#govChipsContainer .chip').forEach(c => c.classList.remove('active'));
+    btnElem.classList.add('active');
+  }}
+  const audit = MODEL.auditData;
+  if (!audit || !audit.findings) return;
+  const list = document.getElementById('govFindingsList');
+  if (!list) return;
+
+  const isRTL = MODEL.lang === 'ar';
+  const filtered = filter === 'all'
+    ? audit.findings
+    : audit.findings.filter(f => f.severity === filter || f.category === filter);
+
+  if (!filtered.length) {{
+    list.innerHTML = `<div style="text-align:center; padding:18px; color:var(--text-muted); font-size:13px;">${{isRTL ? '✅ لا توجد ملاحظات ضمن هذا التصنيف' : '✅ No findings in this category'}}</div>`;
+    return;
+  }}
+
+  const catMeta = {{
+    integrity: {{ label: isRTL ? 'سلامة وهيكلة' : 'Integrity', icon: '🛡️', color: '#3b82f6' }},
+    governance: {{ label: isRTL ? 'حوكمة وتدقيق' : 'Governance', icon: '⚖️', color: '#8b5cf6' }},
+    security: {{ label: isRTL ? 'أمان PII' : 'Security PII', icon: '🔒', color: '#ef4444' }},
+    performance: {{ label: isRTL ? 'أداء وفهارس' : 'Performance', icon: '⚡', color: '#f59e0b' }},
+    standards: {{ label: isRTL ? 'معايير' : 'Standards', icon: '📐', color: '#10b981' }}
+  }};
+
+  list.innerHTML = filtered.map((f, idx) => {{
+    const sevClass = (f.severity || 'info').toLowerCase();
+    const title = isRTL ? (f.title_ar || f.ruleId) : (f.title_en || f.ruleId);
+    const desc = isRTL ? (f.description_ar || '') : (f.description_en || '');
+    const cat = catMeta[f.category] || {{ label: f.category || '', icon: '📌', color: '#64748b' }};
+    const tblTag = f.table ? `<span style="font-family:var(--font-mono); font-size:11px; background:var(--bg-card); padding:2px 6px; border-radius:4px; color:var(--accent);">📋 ${{f.table}}</span>` : '';
+    const colTag = f.column ? `<span style="font-family:var(--font-mono); font-size:11px; background:var(--bg-card); padding:2px 6px; border-radius:4px; color:var(--purple);">🔹 ${{f.column}}</span>` : '';
+    const sqlBox = f.fixSql ? `<div class="gov-sql-box"><code>${{f.fixSql}}</code></div>` : '';
+
+    return `
+      <div class="gov-finding-card sev-${{sevClass}}">
+        <div class="gov-finding-header">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="gov-tag ${{sevClass}}">${{f.severity}}</span>
+            <span style="background:${{cat.color}}18; color:${{cat.color}}; border:1px solid ${{cat.color}}35; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; display:inline-flex; align-items:center; gap:3px;">${{cat.icon}} ${{cat.label}}</span>
+            <span style="font-weight:700; font-size:13px;">${{title}}</span>
+            ${{tblTag}}
+            ${{colTag}}
+          </div>
+          ${{f.table ? `<button class="btn" style="padding:3px 8px; font-size:11px;" onclick="focusAndPanToTable('${{f.table}}')">🎯 ${{isRTL ? 'عرض على الكانفاس' : 'Focus'}}</button>` : ''}}
+        </div>
+        ${{desc ? `<div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${{desc}}</div>` : ''}}
+        ${{f.impact ? `<div style="font-size:11.5px; color:#f59e0b;">⚠️ <b>${{isRTL ? 'الأثر المؤسسي:' : 'Impact:'}}</b> ${{f.impact}}</div>` : ''}}
+        ${{sqlBox}}
+      </div>
+    `;
+  }}).join('');
+}}
+
 // Initialize
 renderDiagram();
 renderDictionary();
 renderSubsystemChips();
+renderGovernanceReport();
 fitView();
 </script>
 </body>

@@ -831,7 +831,7 @@
                 </div>
                 <div>
                   <div class="score-title" id="linterRatingTitle">بانتظار الفحص المعماري</div>
-                  <div class="score-desc" id="i18n-linterScoreDesc">فحص آلي بضغطة زر يكشف الجداول بلا PK، عدم تطابق أنواع FK، الجداول المعزولة، وغياب فهارس المفاتيح الخارجية.</div>
+                  <div class="score-desc" id="i18n-linterScoreDesc">فحص آلي مؤسسي شامل: كشف غياب المفاتيح الأساسية، حوكمة البيانات وأعمدة التدقيق (Audit Columns)، كشف بيانات PII الحساسة، فهارس المفاتيح الخارجية، وتوافق المعايير.</div>
                 </div>
               </div>
               <div class="audit-actions-group">
@@ -840,13 +840,18 @@
               </div>
             </div>
 
-            <!-- Severity Counters & Filters -->
+            <!-- Severity Counters & Enterprise Category Filters -->
             <div class="audit-filters-bar">
               <div class="filter-chips" id="linterFilterChips">
-                <button class="chip active" data-filter="all" onclick="filterLinterFindings('all', this)">الكل (<span id="countAll">0</span>)</button>
-                <button class="chip chip-critical" data-filter="CRITICAL" onclick="filterLinterFindings('CRITICAL', this)">أخطاء حرجة (<span id="countCritical">0</span>)</button>
-                <button class="chip chip-warning" data-filter="WARNING" onclick="filterLinterFindings('WARNING', this)">تحذيرات (<span id="countWarning">0</span>)</button>
-                <button class="chip chip-info" data-filter="INFO" onclick="filterLinterFindings('INFO', this)">توصيات (<span id="countInfo">0</span>)</button>
+                <button class="chip active" data-filter="all" onclick="filterLinterFindings('all', this)"><span id="i18n-filterAll">الكل</span> (<span id="countAll">0</span>)</button>
+                <button class="chip chip-critical" data-filter="CRITICAL" onclick="filterLinterFindings('CRITICAL', this)"><span id="i18n-filterCrit">أخطاء حرجة</span> (<span id="countCritical">0</span>)</button>
+                <button class="chip chip-warning" data-filter="WARNING" onclick="filterLinterFindings('WARNING', this)"><span id="i18n-filterWarn">تحذيرات</span> (<span id="countWarning">0</span>)</button>
+                <button class="chip chip-info" data-filter="INFO" onclick="filterLinterFindings('INFO', this)"><span id="i18n-filterInfo">توصيات</span> (<span id="countInfo">0</span>)</button>
+                <span style="display:inline-block; width:1px; height:18px; background:var(--border, #333); margin:0 4px; vertical-align:middle;"></span>
+                <button class="chip chip-governance" data-filter="governance" onclick="filterLinterFindings('governance', this)">⚖️ <span id="i18n-filterGov">حوكمة</span> (<span id="countCat_governance">0</span>)</button>
+                <button class="chip chip-security" data-filter="security" onclick="filterLinterFindings('security', this)">🔒 <span id="i18n-filterSec">أمان PII</span> (<span id="countCat_security">0</span>)</button>
+                <button class="chip chip-performance" data-filter="performance" onclick="filterLinterFindings('performance', this)">⚡ <span id="i18n-filterPerf">أداء وفهارس</span> (<span id="countCat_performance">0</span>)</button>
+                <button class="chip chip-standards" data-filter="standards" onclick="filterLinterFindings('standards', this)">📐 <span id="i18n-filterStd">معايير</span> (<span id="countCat_standards">0</span>)</button>
               </div>
             </div>
 

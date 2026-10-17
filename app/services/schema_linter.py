@@ -76,6 +76,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             first_col = cols[0]["name"] if cols else "ID"
             findings.append({
                 "ruleId": "MISSING_PK",
+                "category": "integrity",
                 "severity": "CRITICAL",
                 "table": tname,
                 "column": None,
@@ -93,6 +94,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             if col_info and col_info.get("nullable") is True:
                 findings.append({
                     "ruleId": "NULLABLE_PK",
+                    "category": "integrity",
                     "severity": "WARNING",
                     "table": tname,
                     "column": pk_col_name,
@@ -109,6 +111,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
         if total_rels == 0 and len(tables_data) > 1:
             findings.append({
                 "ruleId": "ORPHAN_TABLE",
+                "category": "governance",
                 "severity": "WARNING",
                 "table": tname,
                 "column": None,
@@ -124,6 +127,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
         if len(tname) > 30:
             findings.append({
                 "ruleId": "LONG_IDENTIFIER",
+                "category": "standards",
                 "severity": "INFO",
                 "table": tname,
                 "column": None,
@@ -141,6 +145,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             if cname.upper() in ORACLE_RESERVED_WORDS:
                 findings.append({
                     "ruleId": "RESERVED_KEYWORD",
+                    "category": "standards",
                     "severity": "WARNING",
                     "table": tname,
                     "column": cname,
@@ -150,6 +155,107 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "description_en": f"Reserved keywords require quoted identifiers and often break ORMs and query builders.",
                     "impact": "Code Reliability",
                     "fixSql": f'ALTER TABLE "{tname}" RENAME COLUMN "{cname}" TO "{cname}_VAL";'
+                })
+
+        # Rule 6: Missing Enterprise Audit Columns (GOVERNANCE & COMPLIANCE)
+        # Skip small lookup/mapping tables with <= 2 columns
+        if len(cols) > 2:
+            col_names_lower = {c.get("name", "").lower().strip() for c in cols}
+            has_created = any(k in col_names_lower for k in ("created_at", "created_date", "creation_date", "create_time", "ins_date"))
+            has_updated = any(k in col_names_lower for k in ("updated_at", "modified_date", "last_update_date", "mod_date", "update_time"))
+            if not has_created or not has_updated:
+                missing_parts = []
+                add_cols = []
+                if not has_created:
+                    missing_parts.append("CREATED_AT")
+                    if dialect == "oracle":
+                        add_cols.append('"CREATED_AT" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL')
+                        add_cols.append('"CREATED_BY" VARCHAR2(100) DEFAULT \'SYSTEM\' NOT NULL')
+                    elif dialect == "postgres":
+                        add_cols.append('"created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL')
+                        add_cols.append('"created_by" VARCHAR(100) DEFAULT \'SYSTEM\' NOT NULL')
+                    elif dialect == "mysql":
+                        add_cols.append('`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        add_cols.append('`created_by` VARCHAR(100) DEFAULT \'SYSTEM\'')
+                    else:
+                        add_cols.append('"created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        add_cols.append('"created_by" VARCHAR(100) DEFAULT \'SYSTEM\'')
+                if not has_updated:
+                    missing_parts.append("UPDATED_AT")
+                    if dialect == "oracle":
+                        add_cols.append('"UPDATED_AT" TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        add_cols.append('"UPDATED_BY" VARCHAR2(100)')
+                    elif dialect == "postgres":
+                        add_cols.append('"updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        add_cols.append('"updated_by" VARCHAR(100)')
+                    elif dialect == "mysql":
+                        add_cols.append('`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+                        add_cols.append('`updated_by` VARCHAR(100)')
+                    else:
+                        add_cols.append('"updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+                        add_cols.append('"updated_by" VARCHAR(100)')
+
+                fix_sql = ""
+                if dialect == "oracle":
+                    fix_sql = f'ALTER TABLE "{tname}" ADD (\n  ' + ",\n  ".join(add_cols) + '\n);'
+                elif dialect == "postgres":
+                    fix_sql = f'ALTER TABLE "{tname}"\n  ' + ",\n  ".join(f"ADD COLUMN {ac}" for ac in add_cols) + ';'
+                elif dialect == "mysql":
+                    fix_sql = f'ALTER TABLE `{tname}`\n  ' + ",\n  ".join(f"ADD COLUMN {ac}" for ac in add_cols) + ';'
+                else:
+                    fix_sql = f'ALTER TABLE "{tname}" ADD COLUMN ' + ";\nALTER TABLE \"{tname}\" ADD COLUMN ".join(add_cols) + ';'
+
+                findings.append({
+                    "ruleId": "MISSING_AUDIT_COLUMNS",
+                    "category": "governance",
+                    "severity": "WARNING",
+                    "table": tname,
+                    "column": None,
+                    "title_ar": f"الجدول «{tname}» يفتقر لأعمدة التدقيق والتعقب المؤسسي ({', '.join(missing_parts)})",
+                    "title_en": f"Table '{tname}' lacks enterprise audit tracking columns ({', '.join(missing_parts)})",
+                    "description_ar": "تتطلب معايير حوكمة البيانات المؤسسية (Data Governance) وجود حقول زمنية وهوية للإنشاء والتعديل لضمان الشفافية ومسار التدقيق المحاسبي والنظامي.",
+                    "description_en": "Enterprise Data Governance mandates timestamps and user identifiers for creation and modification to guarantee auditability and regulatory compliance.",
+                    "impact": "Governance & Regulatory Compliance",
+                    "fixSql": fix_sql
+                })
+
+        # Rule 7: Sensitive PII / Credentials Exposure (SECURITY)
+        sensitive_terms = ("password", "passwd", "pwd", "secret", "token", "ssn", "national_id", "credit_card", "card_number", "cvv", "api_key", "pin")
+        for c in cols:
+            cname = c.get("name", "")
+            clow = cname.lower()
+            if any(term in clow for term in sensitive_terms):
+                findings.append({
+                    "ruleId": "PII_SENSITIVE_DATA",
+                    "category": "security",
+                    "severity": "WARNING",
+                    "table": tname,
+                    "column": cname,
+                    "title_ar": f"الحقل «{cname}» في جدول «{tname}» قد يحتوي على بيانات سرية / حساسة (PII & Security)",
+                    "title_en": f"Column '{cname}' in '{tname}' may store sensitive personal or credential data (PII)",
+                    "description_ar": "وفقاً لمعايير الأمان والحوكمة الدولية (ISO 27001 / GDPR / PCI-DSS)، يجب التأكد من تشفير أو تجزئة (Hashing عبر Argon2 / bcrypt) هذا الحقل وعدم تخزينه كنص صريح.",
+                    "description_en": "Regulatory frameworks (GDPR, PCI-DSS, ISO 27001) mandate one-way hashing or strong encryption for sensitive credentials and PII.",
+                    "impact": "Enterprise Security & Privacy",
+                    "fixSql": f'-- توصية أمنية: تأكد من تشفير حقل "{tname}"."{cname}" قبل الحفظ البرمجي'
+                })
+
+        # Rule 8: Non-Standard Identifiers (spaces or special characters)
+        for c in cols:
+            cname = c.get("name", "")
+            if " " in cname or "-" in cname:
+                safe_name = re.sub(r"[\s\-]+", "_", cname).upper()
+                findings.append({
+                    "ruleId": "NON_STANDARD_NAMING",
+                    "category": "standards",
+                    "severity": "WARNING",
+                    "table": tname,
+                    "column": cname,
+                    "title_ar": f"اسم الحقل «{cname}» في جدول «{tname}» يحتوي على مسافات أو رموز خاصة",
+                    "title_en": f"Column name '{cname}' in table '{tname}' contains whitespace or special characters",
+                    "description_ar": "استخدام المسافات أو الرموز الخاصة في التسميات يتطلب وضع علامات حصر إجبارية ويكسر أدوات الـ ORM وتوليد استعلامات الـ API.",
+                    "description_en": "Whitespace or special characters in column names require quoted identifiers and break ORM mappings and API generators.",
+                    "impact": "Code Portability & Standards",
+                    "fixSql": f'ALTER TABLE "{tname}" RENAME COLUMN "{cname}" TO "{safe_name}";'
                 })
 
     # 2. Relationship & Foreign Key inspections
@@ -192,6 +298,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             if c_base != p_base or (c_norm != p_norm and "number" in c_base and c_norm and p_norm):
                 findings.append({
                     "ruleId": "FK_DATATYPE_MISMATCH",
+                    "category": "integrity",
                     "severity": "CRITICAL",
                     "table": child_tbl,
                     "column": child_col_name,
@@ -203,7 +310,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
                     "fixSql": f'ALTER TABLE "{child_tbl}" MODIFY ("{child_col_name}" {p_type});'
                 })
 
-        # Rule 7: Missing Index on Foreign Key Columns (WARNING / PERFORMANCE)
+        # Rule 10: Missing Index on Foreign Key Columns (WARNING / PERFORMANCE)
         # Foreign key columns must be indexed in Oracle to prevent full table locks on parent updates/deletes
         # We check if this column is the first PK column (which already has an index)
         is_pk_indexed = (child_col_name.upper() in [pk.upper() for pk in (child_data.get("pks") or [])])
@@ -211,6 +318,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             idx_name = f"IDX_{child_tbl[:16]}_{child_col_name[:10]}"
             findings.append({
                 "ruleId": "MISSING_FK_INDEX",
+                "category": "performance",
                 "severity": "WARNING",
                 "table": child_tbl,
                 "column": child_col_name,
@@ -230,6 +338,14 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
     critical_count = sum(1 for f in findings if f["severity"] == "CRITICAL")
     warning_count = sum(1 for f in findings if f["severity"] == "WARNING")
     info_count = sum(1 for f in findings if f["severity"] == "INFO")
+
+    category_counts = {
+        "integrity": sum(1 for f in findings if f.get("category") == "integrity"),
+        "governance": sum(1 for f in findings if f.get("category") == "governance"),
+        "security": sum(1 for f in findings if f.get("category") == "security"),
+        "performance": sum(1 for f in findings if f.get("category") == "performance"),
+        "standards": sum(1 for f in findings if f.get("category") == "standards"),
+    }
 
     # Score deduction: Critical = -15 pts, Warning = -5 pts, Info = -1 pt
     base_score = 100
@@ -281,6 +397,7 @@ def audit_schema(tables_data: Dict[str, Any], fk_list: List[Dict[str, Any]], dia
             "info": info_count,
             "total": len(findings)
         },
+        "categories": category_counts,
         "findings": findings,
         "remediationScript": remediation_script
     }

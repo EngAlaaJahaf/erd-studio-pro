@@ -157,6 +157,14 @@ const i18n = {
     btnGenMock: "توليد البيانات التجريبية الذكية",
     btnCopyMock: "نسخ الكود",
     btnDownMock: "تنزيل (.sql)",
+    filterAll: "الكل",
+    filterCrit: "أخطاء حرجة",
+    filterWarn: "تحذيرات",
+    filterInfo: "توصيات",
+    filterGov: "حوكمة",
+    filterSec: "أمان PII",
+    filterPerf: "أداء وفهارس",
+    filterStd: "معايير",
     spotlightBtn: "بحث سريع...",
     spotlightPlaceholder: "ابحث في الجداول، الحقول، الأنواع، الأنظمة... [Ctrl+K]",
     aiTitle: "المساعد الذكي",
@@ -307,6 +315,14 @@ const i18n = {
     btnGenMock: "Generate Smart Mock Data",
     btnCopyMock: "Copy Script",
     btnDownMock: "Download (.sql)",
+    filterAll: "All",
+    filterCrit: "Critical",
+    filterWarn: "Warnings",
+    filterInfo: "Info",
+    filterGov: "Governance",
+    filterSec: "Security & PII",
+    filterPerf: "Performance",
+    filterStd: "Standards",
     spotlightBtn: "Search...",
     spotlightPlaceholder: "Search tables, columns, types, subsystems... [Ctrl+K]",
     aiTitle: "Smart Assistant",
@@ -2376,6 +2392,14 @@ function applyLanguage(lang) {
     relTag('i18n-btnGenMock', 'btnGenMock');
     relTag('i18n-btnCopyMock', 'btnCopyMock');
     relTag('i18n-btnDownMock', 'btnDownMock');
+    relTag('i18n-filterAll', 'filterAll');
+    relTag('i18n-filterCrit', 'filterCrit');
+    relTag('i18n-filterWarn', 'filterWarn');
+    relTag('i18n-filterInfo', 'filterInfo');
+    relTag('i18n-filterGov', 'filterGov');
+    relTag('i18n-filterSec', 'filterSec');
+    relTag('i18n-filterPerf', 'filterPerf');
+    relTag('i18n-filterStd', 'filterStd');
     relTag('i18n-spotlightBtn', 'spotlightBtn');
     if (document.getElementById('spotlightInput') && t.spotlightPlaceholder) {
       document.getElementById('spotlightInput').placeholder = t.spotlightPlaceholder;
@@ -7172,7 +7196,7 @@ async function runSchemaLint() {
       title.textContent = (isRTL ? data.rating_ar : data.rating_en) || (isRTL ? ('التقييم المعماري: ' + data.grade + ' (' + data.score + '/100)') : ('Architecture Rating: ' + data.grade + ' (' + data.score + '/100)'));
     }
 
-    // Counters
+    // Counters (Severity & Enterprise Categories)
     const counts = data.counts || {};
     const countAll = document.getElementById('countAll');
     const countCrit = document.getElementById('countCritical');
@@ -7182,6 +7206,12 @@ async function runSchemaLint() {
     if (countCrit) countCrit.textContent = counts.critical || 0;
     if (countWarn) countWarn.textContent = counts.warning || 0;
     if (countInfo) countInfo.textContent = counts.info || 0;
+
+    const cats = data.categories || {};
+    ['governance', 'security', 'performance', 'standards'].forEach(function(c) {
+      const el = document.getElementById('countCat_' + c);
+      if (el) el.textContent = cats[c] || 0;
+    });
 
     // Show/hide download remediation button
     if (remBtn) {
@@ -7209,7 +7239,9 @@ function filterLinterFindings(filter, chipEl) {
   if (!currentLintResults || !currentLintResults.findings) return;
   const filtered = filter === 'all' 
     ? currentLintResults.findings 
-    : currentLintResults.findings.filter(function(f) { return f.severity === filter; });
+    : currentLintResults.findings.filter(function(f) { 
+        return f.severity === filter || f.category === filter; 
+      });
   renderLinterFindings(filtered, filter);
 }
 
@@ -7225,7 +7257,7 @@ function renderLinterFindings(findings, filter) {
         '<div class="audit-empty-state clean-state">' +
           '<div style="font-size:36px; margin-bottom:8px;">🎉</div>' +
           '<div style="font-weight:700; font-size:15px; color:#10b981;">' + (isRTL ? 'المخطط مثالي ومتوافق مع كافة أفضل الممارسات المعمارية!' : 'Flawless Architecture! No schema anti-patterns detected.') + '</div>' +
-          '<div style="color:var(--text-muted); font-size:12px; margin-top:4px;">' + (isRTL ? 'لا توجد جداول بلا مفاتيح أساسية أو أخطاء في تطابق المفاتيح الخارجية أو جداول معزولة.' : 'All primary keys, foreign key data types, and index constraints are valid.') + '</div>' +
+          '<div style="color:var(--text-muted); font-size:12px; margin-top:4px;">' + (isRTL ? 'كافة المفاتيح الأساسية والخارجية، الفهارس، وقواعد الحوكمة والأمان متوافقة 100%.' : 'All primary keys, foreign key types, indexes, and governance rules are valid.') + '</div>' +
         '</div>';
     } else {
       container.innerHTML = 
@@ -7239,11 +7271,23 @@ function renderLinterFindings(findings, filter) {
 
   const ruleNames = {
     MISSING_PK: isRTL ? 'غياب المفتاح الأساسي' : 'Missing Primary Key',
+    NULLABLE_PK: isRTL ? 'مفتاح أساسي يقبل قيماً فارغة' : 'Nullable Primary Key',
     FK_DATATYPE_MISMATCH: isRTL ? 'عدم تطابق نوع المفتاح الخارجي' : 'FK Data Type Mismatch',
     ORPHAN_TABLE: isRTL ? 'جدول معزول بلا علاقات' : 'Orphan / Isolated Table',
     MISSING_FK_INDEX: isRTL ? 'غياب الفهرس على حقل FK' : 'Missing Index on FK Column',
-    RESERVED_WORD_NAME: isRTL ? 'استخدام كلمة محجوزة' : 'Reserved Word Identifier',
-    NON_STANDARD_NAMING: isRTL ? 'تسمية غير قياسية' : 'Non-Standard Naming'
+    RESERVED_KEYWORD: isRTL ? 'استخدام كلمة محجوزة' : 'Reserved SQL Keyword',
+    NON_STANDARD_NAMING: isRTL ? 'تسمية غير قياسية' : 'Non-Standard Naming',
+    LONG_IDENTIFIER: isRTL ? 'اسم يتجاوز 30 حرفاً' : 'Identifier Too Long (>30 chars)',
+    MISSING_AUDIT_COLUMNS: isRTL ? 'حوكمة: غياب أعمدة التدقيق المؤسسي' : 'Missing Enterprise Audit Columns',
+    PII_SENSITIVE_DATA: isRTL ? 'أمان: كشف بيانات حساسة PII' : 'Sensitive PII / Credential Exposure'
+  };
+
+  const categoryMeta = {
+    integrity: { label: isRTL ? 'سلامة وهيكلة' : 'Integrity', icon: '🛡️', color: '#3b82f6' },
+    governance: { label: isRTL ? 'حوكمة وتدقيق' : 'Governance', icon: '⚖️', color: '#8b5cf6' },
+    security: { label: isRTL ? 'أمان وخصوصية PII' : 'Security & PII', icon: '🔒', color: '#ef4444' },
+    performance: { label: isRTL ? 'أداء وفهارس' : 'Performance', icon: '⚡', color: '#f59e0b' },
+    standards: { label: isRTL ? 'معايير قياسية' : 'Standards', icon: '📐', color: '#10b981' }
   };
 
   let html = '';
@@ -7255,11 +7299,15 @@ function renderLinterFindings(findings, filter) {
     const tableBadge = f.table ? ('<span class="finding-table-tag">📋 ' + f.table + '</span>') : '';
     const colBadge = f.column ? ('<span class="finding-col-tag">🔹 ' + f.column + '</span>') : '';
 
+    const cat = categoryMeta[f.category] || { label: f.category || '', icon: '📌', color: '#6b7280' };
+    const catBadge = f.category ? ('<span class="finding-cat-tag" style="background:' + cat.color + '18; color:' + cat.color + '; border:1px solid ' + cat.color + '35; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; display:inline-flex; align-items:center; gap:3px;">' + cat.icon + ' ' + cat.label + '</span>') : '';
+
     html += 
-      '<div class="finding-card sev-' + sevClass + '">' +
+      '<div class="finding-card sev-' + sevClass + ' severity-' + (f.severity || 'INFO') + '">' +
         '<div class="finding-header">' +
           '<div class="finding-header-left">' +
-            '<span class="finding-badge badge-' + sevClass + '">' + f.severity + '</span>' +
+            '<span class="finding-badge badge-' + sevClass + ' ' + (f.severity || 'INFO') + '">' + f.severity + '</span>' +
+            catBadge +
             '<span class="finding-rule-name">' + titleText + '</span>' +
             tableBadge +
             colBadge +
@@ -7276,7 +7324,7 @@ function renderLinterFindings(findings, filter) {
           '</div>' +
         '</div>' +
         (descText ? ('<div class="finding-message">' + descText + '</div>') : '') +
-        (f.impact ? ('<div class="finding-recommendation">⚠️ <b>' + (isRTL ? 'التأثير المعماري:' : 'Impact:') + '</b> ' + f.impact + '</div>') : '') +
+        (f.impact ? ('<div class="finding-recommendation">⚠️ <b>' + (isRTL ? 'التأثير المؤسسي والمعماري:' : 'Impact:') + '</b> ' + f.impact + '</div>') : '') +
         (f.fixSql ? ('<div class="finding-sql-box"><pre><code>' + f.fixSql + '</code></pre></div>') : '') +
       '</div>';
   });

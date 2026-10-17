@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "data", "app.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "app.db")
 
 def get_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -96,6 +96,44 @@ def init_db():
         created_at TEXT
     )
     """)
+
+    # 7. Enterprise Audit Trail (Immutable Events Log)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS audit_log_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        severity TEXT DEFAULT 'INFO',
+        actor TEXT DEFAULT 'SYSTEM',
+        dialect TEXT,
+        target_db TEXT,
+        details_json TEXT,
+        snapshot_id INTEGER,
+        created_at TEXT NOT NULL
+    )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log_events(created_at DESC)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log_events(event_type)")
+
+    # 8. Schema Snapshots (Historical Versions / Time Machine)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS schema_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_name TEXT NOT NULL,
+        description TEXT,
+        trigger_event TEXT NOT NULL,
+        tables_data_json TEXT NOT NULL,
+        fk_list_json TEXT NOT NULL,
+        table_count INTEGER NOT NULL,
+        fk_count INTEGER NOT NULL,
+        dialect TEXT DEFAULT 'oracle',
+        source TEXT,
+        fingerprint TEXT,
+        created_at TEXT NOT NULL
+    )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_created ON schema_snapshots(created_at DESC)")
 
     conn.commit()
 
@@ -207,6 +245,17 @@ def save_all_table_states(positions, hidden_cols=None, visible_tables=None):
     hidden_cols = hidden_cols or {}
     visible_set = set(visible_tables) if visible_tables is not None else None
 
+    # Prune obsolete tables from table_states if schema is known
+    cached_row = conn.execute("SELECT tables_data_json FROM schema_cache WHERE id=1").fetchone()
+    if cached_row and cached_row[0]:
+        try:
+            valid_set = set(json.loads(cached_row[0]).keys())
+            if valid_set:
+                placeholders = ','.join('?' for _ in valid_set)
+                conn.execute(f"DELETE FROM table_states WHERE table_name NOT IN ({placeholders})", list(valid_set))
+        except Exception:
+            pass
+
     for tbl, pos in positions.items():
         x = pos.get("x", 100)
         y = pos.get("y", 100)
@@ -287,6 +336,18 @@ def reset_for_new_schema():
     conn.execute("DELETE FROM chat_messages")
     conn.commit()
     conn.close()
+
+def clear_schema_cache():
+    """Permanently delete cached schema, positions, layouts, subsystem mappings and definitions."""
+    conn = get_connection()
+    conn.execute("DELETE FROM schema_cache")
+    conn.execute("DELETE FROM table_states")
+    conn.execute("DELETE FROM saved_layouts")
+    conn.execute("DELETE FROM subsystem_mappings")
+    conn.execute("DELETE FROM subsystem_defs")
+    conn.commit()
+    conn.close()
+
 
 # --- Named Saved Layouts ---
 def get_all_layouts():
@@ -471,3 +532,189 @@ def clear_chat_history():
     conn.execute("DELETE FROM chat_messages")
     conn.commit()
     conn.close()
+
+
+# --- Enterprise Audit Trail & Historical Snapshots ---
+
+def record_audit_event(
+    event_type: str,
+    title: str,
+    description: str = None,
+    severity: str = "INFO",
+    actor: str = "SYSTEM",
+    dialect: str = None,
+    target_db: str = None,
+    details: dict = None,
+    snapshot_id: int = None
+) -> int:
+    conn = get_connection()
+    now = datetime.now().isoformat()
+    cur = conn.cursor()
+    details_str = json.dumps(details, ensure_ascii=False) if details else None
+    cur.execute("""
+        INSERT INTO audit_log_events 
+        (event_type, title, description, severity, actor, dialect, target_db, details_json, snapshot_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (event_type, title, description, severity, actor, dialect, target_db, details_str, snapshot_id, now))
+    event_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return event_id
+
+def get_audit_events(limit: int = 100, offset: int = 0, event_type: str = None, severity: str = None, search: str = None):
+    conn = get_connection()
+    query = "SELECT * FROM audit_log_events WHERE 1=1"
+    params = []
+    if event_type and event_type != "ALL":
+        query += " AND event_type = ?"
+        params.append(event_type)
+    if severity and severity != "ALL":
+        query += " AND severity = ?"
+        params.append(severity)
+    if search:
+        query += " AND (title LIKE ? OR description LIKE ? OR target_db LIKE ?)"
+        s = f"%{search}%"
+        params.extend([s, s, s])
+    query += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    rows = conn.execute(query, params).fetchall()
+    events = []
+    for r in rows:
+        d = dict(r)
+        if d.get("details_json"):
+            try:
+                d["details"] = json.loads(d["details_json"])
+            except Exception:
+                d["details"] = {}
+        else:
+            d["details"] = {}
+        events.append(d)
+    conn.close()
+    return events
+
+def count_audit_events(event_type: str = None, severity: str = None, search: str = None) -> int:
+    conn = get_connection()
+    query = "SELECT COUNT(*) FROM audit_log_events WHERE 1=1"
+    params = []
+    if event_type and event_type != "ALL":
+        query += " AND event_type = ?"
+        params.append(event_type)
+    if severity and severity != "ALL":
+        query += " AND severity = ?"
+        params.append(severity)
+    if search:
+        query += " AND (title LIKE ? OR description LIKE ? OR target_db LIKE ?)"
+        s = f"%{search}%"
+        params.extend([s, s, s])
+    count = conn.execute(query, params).fetchone()[0]
+    conn.close()
+    return count
+
+def get_audit_stats():
+    conn = get_connection()
+    total_events = conn.execute("SELECT COUNT(*) FROM audit_log_events").fetchone()[0]
+    total_snapshots = conn.execute("SELECT COUNT(*) FROM schema_snapshots").fetchone()[0]
+    live_migrations = conn.execute("SELECT COUNT(*) FROM audit_log_events WHERE event_type = 'MIGRATION_LIVE'").fetchone()[0]
+    last_event = conn.execute("SELECT created_at, event_type, title, severity FROM audit_log_events ORDER BY id DESC LIMIT 1").fetchone()
+    conn.close()
+    return {
+        "totalEvents": total_events,
+        "total_events": total_events,
+        "totalSnapshots": total_snapshots,
+        "snapshots_count": total_snapshots,
+        "liveMigrations": live_migrations,
+        "live_migrations_count": live_migrations,
+        "lastEvent": dict(last_event) if last_event else None,
+        "last_event": dict(last_event) if last_event else None
+    }
+
+def clear_audit_events(keep_latest: int = 50):
+    conn = get_connection()
+    if keep_latest > 0:
+        conn.execute("""
+            DELETE FROM audit_log_events 
+            WHERE id NOT IN (SELECT id FROM audit_log_events ORDER BY id DESC LIMIT ?)
+        """, (keep_latest,))
+    else:
+        conn.execute("DELETE FROM audit_log_events")
+    conn.commit()
+    conn.close()
+
+def create_schema_snapshot(
+    name: str,
+    tables_data: dict,
+    fk_list: list,
+    trigger_event: str = "MANUAL",
+    description: str = None,
+    dialect: str = "oracle",
+    source: str = None,
+    fingerprint: str = None
+) -> int:
+    conn = get_connection()
+    now = datetime.now().isoformat()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO schema_snapshots
+        (snapshot_name, description, trigger_event, tables_data_json, fk_list_json, table_count, fk_count, dialect, source, fingerprint, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        name,
+        description,
+        trigger_event,
+        json.dumps(tables_data or {}, ensure_ascii=False),
+        json.dumps(fk_list or [], ensure_ascii=False),
+        len(tables_data or {}),
+        len(fk_list or []),
+        dialect or "oracle",
+        source or "canvas",
+        fingerprint or "",
+        now
+    ))
+    snap_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return snap_id
+
+def get_schema_snapshots(limit: int = 50):
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT id, snapshot_name, description, trigger_event, table_count, fk_count, dialect, source, fingerprint, created_at
+        FROM schema_snapshots ORDER BY id DESC LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["name"] = d.get("snapshot_name")
+        result.append(d)
+    return result
+
+def get_schema_snapshot_by_id(snapshot_id: int):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM schema_snapshots WHERE id = ?", (snapshot_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    d["name"] = d.get("snapshot_name")
+    try:
+        d["tablesData"] = json.loads(d["tables_data_json"])
+    except Exception:
+        d["tablesData"] = {}
+    try:
+        d["fkList"] = json.loads(d["fk_list_json"])
+    except Exception:
+        d["fkList"] = []
+    return d
+
+def delete_schema_snapshot(snapshot_id: int) -> bool:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM schema_snapshots WHERE id = ?", (snapshot_id,))
+    deleted = cur.rowcount > 0
+    cur.execute("UPDATE audit_log_events SET snapshot_id = NULL WHERE snapshot_id = ?", (snapshot_id,))
+    conn.commit()
+    conn.close()
+    return deleted
+

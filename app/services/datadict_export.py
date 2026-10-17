@@ -47,21 +47,24 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
     # Build a fast FK lookup: (child_table, child_col) → {parent, parent_col}
     fk_map = {}
     for f in fk_list:
-        parent = f.get("parent", "")
-        for col in (f.get("cols") or "").split(","):
+        parent = (f.get("parent") or f.get("parent_table") or "").upper().strip()
+        child = (f.get("child") or f.get("child_table") or "").upper().strip()
+        cols = str(f.get("cols") or f.get("child_col") or f.get("childCol") or "").strip()
+        for col in cols.split(","):
             col = col.strip()
-            if col:
-                fk_map[(f.get("child", ""), col)] = parent
+            if col and child:
+                fk_map[(child, col.upper())] = parent
 
     for tname in sorted(tables_data.keys()):
         data = tables_data[tname]
-        pks = set(data.get("pks") or [])
+        pks = {str(p).upper() for p in (data.get("pks") or [])}
         columns = data.get("columns") or []
 
         ws = wb.create_sheet(title=tname[:31])
 
         # Row 0: Table title
-        ws["A1"] = f"{tname}"
+        t_comment = data.get("comment") or data.get("description")
+        ws["A1"] = f"{tname} - {t_comment}" if t_comment else f"{tname}"
         ws["A1"].font = _TITLE_FONT
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=15)
 
@@ -85,24 +88,28 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
         for ri, col in enumerate(columns, start=1):
             cname = col.get("name", "")
             base, params = _split_type(col.get("type", ""))
-            parent = fk_map.get((tname, cname), "")
+            parent = fk_map.get((tname.upper(), cname.upper()), "")
+            caption = col.get("caption") if (col.get("caption") and col.get("caption") != "-") else (col.get("comment") or "-")
+            description = col.get("description") if (col.get("description") and col.get("description") != "-") else (col.get("comment") or "-")
+            unique_mark = "✓" if col.get("unique") else ""
+            default_val = col.get("default_value") or "-"
 
             row_vals = [
                 ri,                                         # #
                 cname,                                      # Field name
-                "-",                                        # Caption (not available from SQL)
+                caption,                                    # Caption / prompt
                 base,                                       # Data type
                 params if params else "-",                  # Length
-                "✓" if cname in pks else "",                # PK
+                "✓" if cname.upper() in pks else "",        # PK
                 "✓" if not col.get("nullable", True) else "",  # M
-                "",                                         # U (not tracked)
+                unique_mark,                                # U
                 "",                                         # I (not tracked)
                 "✓" if parent else "",                      # FK
                 f"{parent}({cname})" if parent else "-",   # References
-                "-",                                        # check
+                col.get("check") or "-",                    # check
                 "Hidden" if cname in pks else "Text",       # Field Status
-                "-",                                        # Default
-                "-",                                        # Description
+                default_val,                                # Default
+                description,                                # Description
             ]
             row_num = ri + 3  # header rows 2+3 (1-indexed)
             for ci, val in enumerate(row_vals, start=1):

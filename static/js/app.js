@@ -6101,12 +6101,65 @@ function requestCurrentSchemaExport(dialect, drop) {
   });
 }
 
-function downloadQuickBlob(blob, filename) {
+function getCleanWorkspaceFilename(prefix, ext) {
+  const ws = (workspaces && workspaces.length ? (workspaces.find(w => w.id === activeWorkspaceId)?.name || 'schema') : 'schema');
+  let cleanWs = ws.replace(/[\<\>\:\"\/\\\|\?\*\(\)\[\]\{\}\']/g, '_').replace(/\s+/g, '_').trim();
+  cleanWs = cleanWs.replace(/^_+|_+$/g, '');
+  if (!cleanWs) cleanWs = 'workspace';
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `${prefix}_${cleanWs}_${dateStr}.${ext}`;
+}
+
+function downloadQuickBlob(blob, filename, mimeType) {
+  let finalName = (filename || 'download.bin').trim();
+  // Strip characters forbidden on Windows filesystems
+  finalName = finalName.replace(/[\<\>\:\"\/\\\|\?\*]/g, '_').trim();
+
+  // Auto-detect MIME type from filename if not explicitly provided
+  if (!mimeType) {
+    const ext = (finalName.match(/\.([a-zA-Z0-9]+)$/) || [])[1]?.toLowerCase();
+    if (ext === 'pdf') mimeType = 'application/pdf';
+    else if (ext === 'html' || ext === 'htm') mimeType = 'text/html;charset=utf-8';
+    else if (ext === 'sql') mimeType = 'text/sql;charset=utf-8';
+    else if (ext === 'xlsx') mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    else if (ext === 'json') mimeType = 'application/json;charset=utf-8';
+    else if (ext === 'svg') mimeType = 'image/svg+xml;charset=utf-8';
+    else if (ext === 'png') mimeType = 'image/png';
+  }
+
+  // Ensure the filename strictly has a valid extension
+  if (!/\.[a-zA-Z0-9]{2,5}$/.test(finalName)) {
+    if (mimeType === 'application/pdf') finalName += '.pdf';
+    else if (mimeType && mimeType.includes('html')) finalName += '.html';
+    else if (mimeType && mimeType.includes('sql')) finalName += '.sql';
+    else if (mimeType && mimeType.includes('spreadsheet')) finalName += '.xlsx';
+    else if (mimeType && mimeType.includes('json')) finalName += '.json';
+    else if (mimeType && mimeType.includes('svg')) finalName += '.svg';
+    else if (mimeType && mimeType.includes('png')) finalName += '.png';
+    else finalName += '.pdf';
+  }
+
+  // Re-wrap blob with explicit MIME type if missing or mismatched
+  if (mimeType && (!blob.type || blob.type !== mimeType)) {
+    blob = new Blob([blob], { type: mimeType });
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+  a.style.display = 'none';
+  a.href = url;
+  a.download = finalName;
+  a.setAttribute('download', finalName);
+  document.body.appendChild(a);
+  a.click();
+  
+  // Retain object URL for 60 seconds so Windows / Chromium download daemon completes writing to disk
+  setTimeout(() => {
+    try {
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+  }, 60000);
 }
 
 async function downloadDictionary(schema) {
@@ -6187,10 +6240,10 @@ async function exportInteractiveHtmlReport() {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'HTML export failed');
     }
-    const blob = await res.blob();
-    const wsName = (workspaces && workspaces.length ? (workspaces.find(w => w.id === activeWorkspaceId)?.name || 'schema') : 'schema');
-    const safeName = wsName.replace(/[^\w\u0600-\u06FF\-]/g, '_');
-    downloadQuickBlob(blob, `${safeName}_Interactive_Report.html`);
+    const htmlText = await res.text();
+    const blob = new Blob([htmlText], { type: 'text/html;charset=utf-8' });
+    const filename = getCleanWorkspaceFilename('ERD_Interactive_Report', 'html');
+    downloadQuickBlob(blob, filename, 'text/html;charset=utf-8');
     showToast(isRTL ? '✅ تم تنزيل تقرير HTML التفاعلي المستقل بنجاح' : '✅ Offline HTML report downloaded successfully');
   } catch (err) {
     showToast('❌ ' + err.message);
@@ -6250,10 +6303,10 @@ async function exportExecutivePdfReport() {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'PDF export failed');
     }
-    const blob = await res.blob();
-    const wsName = (workspaces && workspaces.length ? (workspaces.find(w => w.id === activeWorkspaceId)?.name || 'schema') : 'schema');
-    const safeName = wsName.replace(/[^\w\u0600-\u06FF\-]/g, '_');
-    downloadQuickBlob(blob, `${safeName}_Executive_Dictionary.pdf`);
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    const filename = getCleanWorkspaceFilename('ERD_Executive_Dictionary', 'pdf');
+    downloadQuickBlob(blob, filename, 'application/pdf');
     showToast(isRTL ? '✅ تم تنزيل وثيقة PDF المعمارية بنجاح' : '✅ Executive PDF report downloaded successfully');
   } catch (err) {
     showToast('❌ ' + err.message);
@@ -6282,7 +6335,8 @@ async function printExecutiveReport() {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'PDF report failed');
     }
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const printWin = window.open(url, '_blank');
     if (printWin) {
@@ -6301,12 +6355,8 @@ async function exportSchema() {
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Export failed');
     const blob = new Blob([data.script], { type: 'text/sql;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `schema.${dialect}.sql`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    const fname = getCleanWorkspaceFilename(`schema_${dialect}`, 'sql');
+    downloadQuickBlob(blob, fname, 'text/sql;charset=utf-8');
  showToast(` ${data.tableCount} tables • ${data.fkCount} FKs`);
   } catch (err) {
  showToast(' ' + err.message);
@@ -6422,15 +6472,12 @@ async function exportDataDictionaryFromSql() {
       try { const t = await res.json(); if (t.detail) msg = t.detail; } catch (_) {}
       throw new Error(msg);
     }
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const cd = res.headers.get('Content-Disposition') || '';
     const m = /filename="([^"]+)"/.exec(cd);
     const fname = m ? m[1] : 'data_dictionary_merged.xlsx';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+    downloadQuickBlob(blob, fname, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
  info.innerHTML = ` تم توليد <b>${ddEsc(fname)}</b> — <b>${res.headers.get('X-Tables') || '?'}</b> جدول • <b>${res.headers.get('X-Fks') || '?'}</b> علاقة.`;
  showToast(' تم توليد قاموس البيانات وتنزيله');
   } catch (err) {
@@ -6443,14 +6490,8 @@ function downloadDdSql() {
  if (!pre.value) { showToast(' لا يوجد كود جاهز للتنزيل'); return; }
   const dialect = document.getElementById('ddDialect').value;
   const blob = new Blob([pre.value], { type: 'text/sql;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${window.__ddFile || 'data_dictionary'}_${dialect}.sql`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const fname = `${window.__ddFile || 'data_dictionary'}_${dialect}.sql`;
+  downloadQuickBlob(blob, fname, 'text/sql;charset=utf-8');
 }
 async function copyDdSql() {
   const pre = document.getElementById('ddPreview');
@@ -6562,13 +6603,10 @@ async function backupDatabase() {
   try {
     const res = await fetch('/api/db/backup');
     if (!res.ok) throw new Error('backup failed');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `TESTR_ERD_Studio_Backup_${new Date().toISOString().slice(0,10)}.db`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const arrayBuffer = await res.arrayBuffer();
+    const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+    const fname = `TESTR_ERD_Studio_Backup_${new Date().toISOString().slice(0,10)}.db`;
+    downloadQuickBlob(blob, fname, 'application/octet-stream');
  showToast(currentLang === 'ar' ? ' تم تنزيل نسخة احتياطية من قاعدة البيانات' : ' Database backup downloaded');
   } catch (err) {
  showToast(' Backup error: ' + err.message);
@@ -6618,13 +6656,9 @@ function exportStateJson() {
       pan_y: panY.toString()
     }
   };
-  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `TESTR_ERD_State_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json;charset=utf-8' });
+  const fname = `TESTR_ERD_State_${new Date().toISOString().slice(0,10)}.json`;
+  downloadQuickBlob(blob, fname, 'application/json;charset=utf-8');
  showToast(currentLang === 'ar' ? ' تم تصدير لقطة الحالة' : ' State snapshot exported');
 }
 
@@ -6857,13 +6891,9 @@ function buildExportSvg() {
 
 function exportSVG() {
   const { svg } = buildExportSvg();
-  const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'TESTR_ERD_Studio.svg';
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml;charset=utf-8' });
+  const fname = getCleanWorkspaceFilename('TESTR_ERD_Studio', 'svg');
+  downloadQuickBlob(blob, fname, 'image/svg+xml;charset=utf-8');
  showToast(currentLang === 'ar' ? ' تم تصدير SVG' : ' SVG Exported');
 }
 
@@ -6882,10 +6912,11 @@ function exportPNG() {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    a.download = 'TESTR_ERD_Studio.png';
-    a.click();
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const fname = getCleanWorkspaceFilename('TESTR_ERD_Studio', 'png');
+      downloadQuickBlob(blob, fname, 'image/png');
+    }, 'image/png');
  showToast(currentLang === 'ar' ? ' تم تصدير PNG' : ' PNG Exported');
   };
   img.onerror = () => {

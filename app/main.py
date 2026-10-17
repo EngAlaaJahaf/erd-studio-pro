@@ -622,11 +622,13 @@ async def export_data_dictionary(files: list[UploadFile] = FileParam(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"تعذر توليد ملف Excel: {e}")
     base = base_names[0] if len(base_names) == 1 else "merged"
+    safe_base = re.sub(r'[^\w\-]', '_', base).strip('_') or "dictionary"
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": f'attachment; filename="data_dictionary_{base}.xlsx"',
+            "Content-Disposition": f'attachment; filename="data_dictionary_{safe_base}.xlsx"',
+            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "X-Tables": str(parsed["tableCount"]),
             "X-Fks": str(parsed["fkCount"]),
         },
@@ -762,6 +764,7 @@ def export_html_report(req: Optional[ReportExportRequest] = Body(None)):
             media_type="text/html; charset=utf-8",
             headers={
                 "Content-Disposition": 'attachment; filename="ERD_Studio_Interactive_Report.html"',
+                "Content-Type": "text/html; charset=utf-8",
                 "X-Tables": str(len(tables_data)),
                 "X-Fks": str(len(fk_list))
             }
@@ -801,6 +804,7 @@ def export_pdf_report(req: Optional[ReportExportRequest] = Body(None)):
             media_type="application/pdf",
             headers={
                 "Content-Disposition": 'attachment; filename="ERD_Executive_Data_Dictionary.pdf"',
+                "Content-Type": "application/pdf",
                 "X-Tables": str(len(tables_data)),
                 "X-Fks": str(len(fk_list))
             }

@@ -299,6 +299,18 @@ def reset_for_new_schema():
     conn.commit()
     conn.close()
 
+def clear_schema_cache():
+    """Permanently delete cached schema, positions, layouts, subsystem mappings and definitions."""
+    conn = get_connection()
+    conn.execute("DELETE FROM schema_cache")
+    conn.execute("DELETE FROM table_states")
+    conn.execute("DELETE FROM saved_layouts")
+    conn.execute("DELETE FROM subsystem_mappings")
+    conn.execute("DELETE FROM subsystem_defs")
+    conn.commit()
+    conn.close()
+
+
 # --- Named Saved Layouts ---
 def get_all_layouts():
     conn = get_connection()

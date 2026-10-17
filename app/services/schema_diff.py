@@ -90,9 +90,9 @@ def compare_schemas(
 
     # Compare FKs
     def _fk_key(fk):
-        c = (fk.get("child") or "").upper()
-        p = (fk.get("parent") or "").upper()
-        col = (fk.get("cols") or fk.get("childCol") or "").upper()
+        c = (fk.get("child") or fk.get("child_table") or "").upper().strip()
+        p = (fk.get("parent") or fk.get("parent_table") or "").upper().strip()
+        col = str(fk.get("cols") or fk.get("childCol") or fk.get("child_col") or "").upper().strip()
         return f"{c}->{p}:{col}"
 
     src_fk_map = {_fk_key(f): f for f in src_fks}
@@ -196,8 +196,9 @@ def _generate_migration_ddl(
     if dropped_fks:
         lines.append("-- 1. Drop Foreign Keys")
         for fk in dropped_fks:
-            c = fk.get("child")
-            fk_name = fk.get("name") or f"FK_{c}_{fk.get('parent')}"
+            c = fk.get("child") or fk.get("child_table")
+            p = fk.get("parent") or fk.get("parent_table")
+            fk_name = fk.get("name") or fk.get("fk") or f"FK_{c}_{p}"
             if dia in ("oracle", "postgres", "mssql"):
                 lines.append(f'ALTER TABLE {q}{c}{q} DROP CONSTRAINT {q}{fk_name}{q};')
             elif dia == "mysql":
@@ -299,14 +300,14 @@ def _generate_migration_ddl(
     if added_fks:
         lines.append("-- 5. Add New Foreign Key Constraints")
         for fk in added_fks:
-            c = fk.get("child")
-            p = fk.get("parent")
-            col = fk.get("cols") or fk.get("childCol")
-            p_col = fk.get("parentCol")
+            c = fk.get("child") or fk.get("child_table")
+            p = fk.get("parent") or fk.get("parent_table")
+            col = fk.get("cols") or fk.get("childCol") or fk.get("child_col")
+            p_col = fk.get("parentCol") or fk.get("parent_col")
             if not p_col:
                 p_pks = current_tables.get(p, {}).get("pks") or []
                 p_col = p_pks[0] if p_pks else "ID"
-            fk_name = fk.get("name") or f"FK_{c}_{p}"
+            fk_name = fk.get("name") or fk.get("fk") or f"FK_{c}_{p}"
             lines.append(
                 f'ALTER TABLE {q}{c}{q} ADD CONSTRAINT {q}{fk_name}{q} '
                 f'FOREIGN KEY ({q}{col}{q}) REFERENCES {q}{p}{q} ({q}{p_col}{q});'

@@ -30,18 +30,11 @@ from app.services import mock_data
 # Initialize SQLite Database
 db.init_db()
 
-# Check if schema cache exists, if not, sync from Oracle
-if not db.get_cached_schema():
-    try:
-        oracle_sync.sync_schema_from_oracle()
-    except Exception as e:
-        print(f"Initial sync warning: {e}")
-
-# Seed subsystem classification if no saved mapping yet
+# Seed subsystem classification if no saved mapping yet and cached schema exists
 try:
     if not db.get_subsystem_mappings():
         cached = db.get_cached_schema()
-        if cached:
+        if cached and cached.get("tablesData"):
             res = subsys.detect_subsystems(cached["tablesData"], cached["fkList"])
             db.save_subsystem_mappings(res["mapping"])
             db.save_subsystem_defs(res["subsystems"])
@@ -49,6 +42,13 @@ try:
 except Exception as e:
     print(f"Subsystem seed warning: {e}")
 
+
+
+def _fk_child(f):
+    return (f.get("child") or f.get("child_table") or "").upper().strip()
+
+def _fk_parent(f):
+    return (f.get("parent") or f.get("parent_table") or "").upper().strip()
 
 def schema_fingerprint(tables_data, fk_list):
     """Stable fingerprint of a schema: table/column/pk layout + FK edges."""
@@ -58,9 +58,10 @@ def schema_fingerprint(tables_data, fk_list):
         cols = ",".join(c["name"] for c in d.get("columns", []))
         pks = ",".join(d.get("pks") or [])
         lines.append(f"{t}:{cols}#{pks}")
-    for f in sorted(fk_list, key=lambda x: (x["child"], x["parent"], x.get("cols", ""))):
-        lines.append(f"{f['child']}>{f['parent']}:{f.get('cols', '')}")
+    for f in sorted(fk_list, key=lambda x: (_fk_child(x), _fk_parent(x), str(x.get("cols") or x.get("child_col") or ""))):
+        lines.append(f"{_fk_child(f)}>{_fk_parent(f)}:{f.get('cols') or f.get('child_col') or ''}")
     return hashlib.md5(("\n".join(lines)).encode("utf-8")).hexdigest()
+
 
 
 def compute_subsystems(cached):
@@ -110,6 +111,20 @@ def classify_and_save(cached, use_ai=True):
 
 def ingest_schema(tables_data, fk_list, dialect, source, schema_name=None, use_ai=True):
     """Store a new/unified schema in the cache and return the enriched result."""
+    norm_fks = []
+    for f in (fk_list or []):
+        c = _fk_child(f)
+        p = _fk_parent(f)
+        col = str(f.get("cols") or f.get("child_col") or f.get("childCol") or "").strip()
+        fk_name = f.get("fk") or f.get("fk_name") or f.get("name") or (f"FK_{c}_{p}_{col}" if c and p else "")
+        norm_fks.append({
+            "child": c,
+            "parent": p,
+            "cols": col,
+            "fk": fk_name
+        })
+    fk_list = norm_fks
+
     fp = schema_fingerprint(tables_data, fk_list)
     old = db.get_cached_schema()
     if not old or old.get("schemaFingerprint") != fp:
@@ -190,8 +205,17 @@ def health_check():
 def get_schema():
     cached = db.get_cached_schema()
     if not cached:
-        res = oracle_sync.sync_schema_from_oracle()
-        return res
+        return {
+            "success": True,
+            "tablesData": {},
+            "fkList": [],
+            "tableCount": 0,
+            "fkCount": 0,
+            "lastSync": None,
+            "dialect": "oracle",
+            "source": "none",
+            "schemaName": None,
+        }
     return {
         "success": True,
         "tablesData": cached["tablesData"],
@@ -204,12 +228,21 @@ def get_schema():
         "schemaName": cached.get("schemaName"),
     }
 
+@app.post("/api/schema/clear")
+def clear_schema_endpoint():
+    db.clear_schema_cache()
+    return {"success": True, "message": "Schema cache and all tables cleared permanently"}
+
 @app.get("/api/connectors")
 def list_connectors():
+    cached = db.get_cached_schema()
     return {"success": True, "connectors": db_connectors.list_connectors(), "current": {
-        "dialect": (db.get_cached_schema() or {}).get("dialect", "oracle"),
-        "source": (db.get_cached_schema() or {}).get("source", "oracle"),
+        "dialect": (cached or {}).get("dialect", "oracle"),
+        "source": (cached or {}).get("source", "none"),
+        "schemaName": (cached or {}).get("schemaName"),
+        "tableCount": (cached or {}).get("tableCount", 0),
     }}
+
 
 class ConnectorRequest(BaseModel):
     dialect: str
@@ -269,9 +302,56 @@ async def parse_sql_text(payload: Dict[str, Any] = Body(...)):
         },
     }
 
+class SqlConvertRequest(BaseModel):
+    sql: str
+    target_dialect: Optional[str] = "postgres"
+    include_drop: Optional[bool] = True
+
+@app.post("/api/sql/convert")
+def convert_sql_endpoint(req: SqlConvertRequest):
+    """Transpile DDL directly between any SQL dialects."""
+    text = (req.sql or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty SQL text")
+    try:
+        detected = sql_import.detect_dialect(text)
+        parsed = sql_import.parse_sql_schema(text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    target = (req.target_dialect or "postgres").lower()
+    if target not in sql_export.DIALECTS:
+        target = "postgres"
+    converted_sql = sql_export.generate_ddl(
+        parsed["tablesData"], parsed["fkList"],
+        dialect=target, include_drop=bool(req.include_drop)
+    )
+    return {
+        "success": True,
+        "sourceDialect": detected,
+        "targetDialect": target,
+        "tableCount": parsed["tableCount"],
+        "fkCount": parsed["fkCount"],
+        "convertedSql": converted_sql,
+        "schema": {
+            "tablesData": parsed["tablesData"],
+            "fkList": parsed["fkList"],
+            "tableCount": parsed["tableCount"],
+            "fkCount": parsed["fkCount"],
+            "dialect": target,
+            "source": f"convert-{target}"
+        }
+    }
+
+def _fk_child(f):
+    return (f.get("child") or f.get("child_table") or "").upper().strip()
+
+def _fk_parent(f):
+    return (f.get("parent") or f.get("parent_table") or "").upper().strip()
+
 class SchemaMutateRequest(BaseModel):
     action: str
     params: Dict[str, Any] = {}
+
 
 @app.post("/api/schema/mutate")
 def mutate_schema(req: SchemaMutateRequest):
@@ -326,21 +406,58 @@ def mutate_schema(req: SchemaMutateRequest):
             tables_data[tname]["columns"] = [c for c in tables_data[tname]["columns"] if c["name"].lower() != cname]
             if "pks" in tables_data[tname]:
                 tables_data[tname]["pks"] = [p for p in tables_data[tname]["pks"] if p.lower() != cname]
-            fk_list[:] = [f for f in fk_list if not (f["child"] == tname and f["cols"] == cname)]
+            fk_list[:] = [f for f in fk_list if not (_fk_child(f) == tname and str(f.get("cols") or f.get("child_col") or "").lower() == cname)]
 
     elif action == "add_relationship":
         fk_list.append({
-            "child": params["child_table"].upper(),
-            "parent": params["parent_table"].upper(),
-            "cols": params["child_column"].lower(),
-            "fk": params.get("fk_name") or f"FK_{params['child_table']}_{params['parent_table']}_{params['child_column']}"
+            "child": (params.get("child_table") or params.get("child", "")).upper(),
+            "parent": (params.get("parent_table") or params.get("parent", "")).upper(),
+            "cols": str(params.get("child_column") or params.get("cols", "")).lower(),
+            "fk": params.get("fk_name") or f"FK_{params.get('child_table')}_{params.get('parent_table')}_{params.get('child_column')}"
         })
 
     elif action == "drop_table":
         tname = params.get("table", "").upper().strip()
         if tname in tables_data:
             del tables_data[tname]
-        fk_list[:] = [f for f in fk_list if f["child"] != tname and f["parent"] != tname]
+        fk_list[:] = [f for f in fk_list if _fk_child(f) != tname and _fk_parent(f) != tname]
+        try:
+            conn = db.get_connection()
+            conn.execute("DELETE FROM table_states WHERE table_name = ?", (tname,))
+            conn.execute("DELETE FROM subsystem_mappings WHERE table_name = ?", (tname,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    elif action == "drop_tables":
+        tnames = [t.upper().strip() for t in params.get("tables", []) if t]
+        tset = set(tnames)
+        for tname in tnames:
+            if tname in tables_data:
+                del tables_data[tname]
+        fk_list[:] = [f for f in fk_list if _fk_child(f) not in tset and _fk_parent(f) not in tset]
+        try:
+            conn = db.get_connection()
+            for tname in tnames:
+                conn.execute("DELETE FROM table_states WHERE table_name = ?", (tname,))
+                conn.execute("DELETE FROM subsystem_mappings WHERE table_name = ?", (tname,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    elif action == "clear_schema":
+        tables_data.clear()
+        fk_list.clear()
+        try:
+            conn = db.get_connection()
+            conn.execute("DELETE FROM table_states")
+            conn.execute("DELETE FROM subsystem_mappings")
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     elif action in ("document_schema", "set_table_comment", "set_column_comment"):
         if action == "set_table_comment":
@@ -558,8 +675,14 @@ class SchemaExportRequest(BaseModel):
 def export_schema(req: SchemaExportRequest):
     if not req.tablesData:
         raise HTTPException(status_code=404, detail="No schema loaded")
-    fks = [fk for fk in req.fkList
-           if fk.get("child") in req.tablesData and fk.get("parent") in req.tablesData]
+    fks = []
+    for fk in req.fkList:
+        c = _fk_child(fk)
+        p = _fk_parent(fk)
+        if c in req.tablesData and p in req.tablesData:
+            col = str(fk.get("cols") or fk.get("child_col") or fk.get("childCol") or "").strip()
+            fk_name = fk.get("fk") or fk.get("fk_name") or fk.get("name") or f"FK_{c}_{p}_{col}"
+            fks.append({"child": c, "parent": p, "cols": col, "fk": fk_name})
     payload = sql_export.generate_export_payload(req.tablesData, fks,
                                                  dialect=req.dialect, include_drop=req.include_drop)
     if not payload.get("success"):
@@ -572,8 +695,14 @@ def dictionary_from_schema(req: SchemaExportRequest):
     """Build a dictionary directly from the active workspace, without SQL upload."""
     if not req.tablesData:
         raise HTTPException(status_code=400, detail="No tables in the current diagram")
-    fks = [fk for fk in req.fkList
-           if fk.get("child") in req.tablesData and fk.get("parent") in req.tablesData]
+    fks = []
+    for fk in req.fkList:
+        c = _fk_child(fk)
+        p = _fk_parent(fk)
+        if c in req.tablesData and p in req.tablesData:
+            col = str(fk.get("cols") or fk.get("child_col") or fk.get("childCol") or "").strip()
+            fk_name = fk.get("fk") or fk.get("fk_name") or fk.get("name") or f"FK_{c}_{p}_{col}"
+            fks.append({"child": c, "parent": p, "cols": col, "fk": fk_name})
     try:
         content = datadict_export.build_workbook_bytes(req.tablesData, fks)
     except Exception as e:
@@ -750,8 +879,15 @@ def test_oracle_connection(req: DbTestRequest):
     try:
         conn = oracledb.connect(user=req.user, password=req.password, dsn=dsn)
         cur = conn.cursor()
-        cur.execute("SELECT banner_full FROM v$version WHERE ROWNUM=1")
-        version = cur.fetchone()[0]
+        try:
+            cur.execute("SELECT banner_full FROM v$version WHERE ROWNUM=1")
+            version = cur.fetchone()[0]
+        except Exception:
+            try:
+                cur.execute("SELECT banner FROM v$version WHERE ROWNUM=1")
+                version = cur.fetchone()[0]
+            except Exception:
+                version = "Oracle Database"
         cur.execute(f"SELECT COUNT(*) FROM all_tables WHERE owner='{req.user.upper()}'")
         tbl_count = cur.fetchone()[0]
         conn.close()

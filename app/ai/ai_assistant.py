@@ -581,7 +581,10 @@ def _apply_backend_mutation(name, args):
                 td[t]["columns"] = [c for c in td[t]["columns"] if c["name"].lower() != cname]
                 if "pks" in td[t]:
                     td[t]["pks"] = [p for p in td[t]["pks"] if p.lower() != cname]
-                fk[:] = [f for f in fk if not (f["child"] == t and f["cols"] == cname)]
+                def _fk_c(f): return (f.get("child") or f.get("child_table") or "").upper().strip()
+                def _fk_p(f): return (f.get("parent") or f.get("parent_table") or "").upper().strip()
+                def _fk_col(f): return str(f.get("cols") or f.get("child_col") or "").lower().strip()
+                fk[:] = [f for f in fk if not (_fk_c(f) == t and _fk_col(f) == cname)]
         elif name == "add_relationship":
             fk.append({
                 "child": args["child_table"].upper(),
@@ -593,7 +596,9 @@ def _apply_backend_mutation(name, args):
             t = args.get("table", "").upper().strip()
             if t in td:
                 del td[t]
-            fk[:] = [f for f in fk if f["child"] != t and f["parent"] != t]
+            def _fk_c(f): return (f.get("child") or f.get("child_table") or "").upper().strip()
+            def _fk_p(f): return (f.get("parent") or f.get("parent_table") or "").upper().strip()
+            fk[:] = [f for f in fk if _fk_c(f) != t and _fk_p(f) != t]
         elif name in ("document_schema", "set_table_comment", "set_column_comment"):
             if name == "set_table_comment":
                 t = args.get("table", "").upper()

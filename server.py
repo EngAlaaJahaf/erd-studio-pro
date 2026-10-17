@@ -25,7 +25,10 @@ def main():
         except ValueError:
             pass
 
-    print(f"🚀 Starting TESTR ERD Studio Pro on http://{host}:{port} ...")
+    try:
+        print(f"Starting TESTR ERD Studio Pro on http://{host}:{port} ...")
+    except Exception:
+        pass
     uvicorn.run("app.main:app", host=host, port=port, reload=False)
 
 

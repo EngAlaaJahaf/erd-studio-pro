@@ -49,7 +49,10 @@ def _build_prompt(tables_data, fk_list):
     lines = []
     fk_by_parent = {}
     for f in fk_list:
-        fk_by_parent.setdefault(f["parent"], []).append(f["child"])
+        p = (f.get("parent") or f.get("parent_table") or "").upper().strip()
+        c = (f.get("child") or f.get("child_table") or "").upper().strip()
+        if p and c:
+            fk_by_parent.setdefault(p, []).append(c)
     for t in tables:
         fkids = fk_by_parent.get(t, [])
         rel = (", children: " + ", ".join(sorted(fkids))) if fkids else ""

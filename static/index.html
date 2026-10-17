@@ -301,6 +301,10 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4-4-4 4"/><circle cx="12" cy="14" r="4"/></svg>
           <span class="btn-label-text" id="i18n-traceLineageLabel">تتبع التبعيات</span>
         </button>
+        <button class="btn-tool btn-sm danger" id="i18n-btnDeleteTable" onclick="deleteSelectedTableFromBar()" title="حذف الجدول نهائياً" style="color:#ef4444; border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.08);">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          <span class="btn-label-text" id="i18n-barDeleteText">حذف</span>
+        </button>
       </div>
       <div id="barMultiActions" style="display:none; gap:6px;">
         <button class="btn-tool btn-sm primary" id="i18n-btnMultiNoAudit" onclick="applyNoAuditToMultiSelection()">
@@ -318,6 +322,10 @@
         <button class="btn-tool btn-sm" id="i18n-btnMultiHide" onclick="hideAllSelectedTables()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           Hide
+        </button>
+        <button class="btn-tool btn-sm danger" id="i18n-btnMultiDelete" onclick="deleteMultiSelectedTablesFromBar()" title="حذف الجداول المحددة نهائياً" style="color:#ef4444; border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.08);">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          <span class="btn-label-text" id="i18n-barMultiDeleteText">حذف المحدّد</span>
         </button>
       </div>
       <button class="btn-ghost" style="margin-left: 4px;" onclick="deselectAll()" title="Deselect All">
@@ -806,6 +814,10 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="8" cy="8" r="1.5"/><circle cx="16" cy="16" r="1.5"/><circle cx="12" cy="12" r="1.5"/></svg>
               <span id="i18n-tabMock">البيانات التجريبية (Mock Data)</span>
             </button>
+            <button class="audit-tab-btn" id="auditTabConvert" onclick="switchAuditTab('convert')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+              <span id="i18n-tabConvert">محول لهجات SQL (Transpiler)</span>
+            </button>
           </div>
 
           <!-- ════════════ PANEL 1: SCHEMA LINTER ════════════ -->
@@ -953,6 +965,62 @@
             </div>
           </div>
 
+          <!-- ════════════ PANEL 4: SQL DIALECT TRANSPILER ════════════ -->
+          <div class="audit-panel" id="panel-audit-convert" style="display:none;">
+            <div class="audit-card">
+              <div class="audit-card-head">
+                <div>
+                  <div class="audit-card-title">محول لهجات SQL المباشر (Multi-Database Dialect Transpiler)</div>
+                  <div class="audit-card-desc">تحويل فوري لأي سكربت DDL بين قواعد البيانات المختلفة (Oracle, PostgreSQL, MySQL, SQL Server, SQLite) مع كشف اللهجة وتكييف الأنواع والقيود تلقائياً.</div>
+                </div>
+              </div>
+
+              <div class="form-grid" style="margin-top:14px;">
+                <div class="form-group" style="grid-column: span 2;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label>كود SQL المصدر (Source DDL Script)</label>
+                    <div style="display:flex; gap:6px;">
+                      <button class="btn-tool btn-xs" type="button" onclick="loadCurrentDiagramToTranspiler()">📥 استيراد كود المخطط الحالي</button>
+                      <button class="btn-tool btn-xs" type="button" onclick="document.getElementById('transpileSqlInput').value='';">🧹 مسح</button>
+                    </div>
+                  </div>
+                  <textarea id="transpileSqlInput" class="form-input" style="min-height:160px; direction:ltr; font-family:ui-monospace,Consolas,monospace; font-size:12px;" placeholder="-- الصق كود DDL هنا من أي قاعدة بيانات (Oracle, MySQL, Postgres, MSSQL...)..."></textarea>
+                </div>
+                <div class="form-group">
+                  <label>اللهجة المستهدفة للتحويل (Target Dialect)</label>
+                  <select id="transpileTargetDialect" class="form-input">
+                    <option value="postgres" selected>PostgreSQL (JSONB, SERIAL, UUID, BOOLEAN)</option>
+                    <option value="oracle">Oracle Database (VARCHAR2, NUMBER, CLOB)</option>
+                    <option value="mysql">MySQL (AUTO_INCREMENT, TINYINT, LONGTEXT)</option>
+                    <option value="mssql">Microsoft SQL Server (NVARCHAR, IDENTITY, BIT)</option>
+                    <option value="sqlite">SQLite (TEXT, INTEGER PRIMARY KEY)</option>
+                  </select>
+                </div>
+                <div class="form-group" style="align-self:flex-end">
+                  <label><input type="checkbox" id="transpileDropCb" checked> تضمين أوامر الحذف (DROP IF EXISTS)</label>
+                </div>
+              </div>
+              <div class="actions" style="margin-top:10px;">
+                <button class="btn-tool primary" onclick="runSqlTranspiler()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg> <span>⚡ تحويل اللهجة فوراً (Transpile DDL)</span></button>
+              </div>
+            </div>
+
+            <!-- Output Container -->
+            <div id="transpileResultsContainer" style="display:none; margin-top:16px;">
+              <div class="migration-script-card">
+                <div class="migration-head">
+                  <div id="transpileStats" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px;"></div>
+                  <div class="actions">
+                    <button class="btn-tool btn-sm" onclick="copyTranspiledSql()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>نسخ الكود</span></button>
+                    <button class="btn-tool btn-sm" onclick="downloadTranspiledSql()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span>تنزيل (.sql)</span></button>
+                    <button class="btn-tool btn-sm primary" onclick="openTranspiledInNewTab()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> <span>فتح كـ مخطط ERD في تبويب جديد</span></button>
+                  </div>
+                </div>
+                <textarea class="form-input migration-code-editor" id="transpileSqlOutput" spellcheck="false" readonly style="min-height:240px; direction:ltr; font-family:ui-monospace,Consolas,monospace; font-size:12px;"></textarea>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -1053,12 +1121,18 @@
 
     <div class="modal-body" id="modalColumnsList"></div>
 
-    <div class="modal-footer">
-      <span id="modalColCount" style="font-size:11.5px; color:var(--text-muted); font-family:var(--font-mono);">18 visible</span>
-      <button class="btn-tool btn-sm primary" id="i18n-modalDone" onclick="closeColumnModal()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Done
+    <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+      <button class="btn-tool btn-sm danger" id="modalDeleteTableBtn" onclick="confirmDeleteCurrentModalTable()" style="color:#ef4444; border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.08);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        <span id="i18n-modalDeleteTable">حذف الجدول نهائياً</span>
       </button>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span id="modalColCount" style="font-size:11.5px; color:var(--text-muted); font-family:var(--font-mono);">18 visible</span>
+        <button class="btn-tool btn-sm primary" id="i18n-modalDone" onclick="closeColumnModal()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Done
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -1097,7 +1171,13 @@
       <div class="settings-pane" id="tab-db">
         <div class="settings-section-title" id="i18n-dbSectionCurrent">Database Connection</div>
         <div class="form-group">
-          <label id="i18n-dbCurrentInfo">Current Schema</label>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label id="i18n-dbCurrentInfo" style="margin-bottom:0; font-weight:600;">Current Schema</label>
+            <button type="button" class="btn-tool danger" id="btnClearCurrentSchema" onclick="confirmClearCurrentSchema()" style="display:none; padding:3px 10px; font-size:11px; gap:5px; border-radius:5px; cursor:pointer;" title="حذف وتفريغ هذا المصدر نهائياً من قاعدة بيانات التطبيق">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span id="i18n-clearSchemaBtn">حذف وتفريغ هذا المصدر نهائياً</span>
+            </button>
+          </div>
           <div class="db-test-result ok" id="dbCurrentInfo" style="white-space:pre-line"></div>
         </div>
         <div class="form-group">
@@ -1403,6 +1483,93 @@ CREATE TABLE orders (
   </div>
 </div>
 
+<!-- ORACLE / DIRECT DB CONNECT MODAL -->
+<div class="modal-overlay" id="oracleConnectModal" style="display:none;" onclick="if(event.target===this) toggleOracleConnectModal(false)">
+  <div class="settings-modal" style="max-width:580px; width:92%;">
+    <div class="settings-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:36px; height:36px; border-radius:8px; background:rgba(37,99,235,0.15); color:var(--accent); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        </div>
+        <div>
+          <div id="i18n-oracleModalTitle" class="settings-modal-title">اتصال مباشر بقاعدة البيانات</div>
+          <div id="i18n-oracleModalSub" class="settings-modal-subtitle">جلب المخطط والجداول مباشرة في صفحة جديدة من قاعدة البيانات المتصلة</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="toggleOracleConnectModal(false)" title="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="padding:18px 20px; display:flex; flex-direction:column; gap:12px;">
+      <div class="form-group">
+        <label id="i18n-modalDbDialect">المحرك / نوع قاعدة البيانات</label>
+        <select id="modalDbDialect" class="form-input" onchange="toggleModalDbFields()">
+          <option value="oracle" selected>Oracle Database</option>
+          <option value="mysql">MySQL</option>
+          <option value="postgres">PostgreSQL</option>
+          <option value="mssql">SQL Server</option>
+          <option value="sqlite_file">SQLite (.db file)</option>
+        </select>
+      </div>
+
+      <div id="modalDbFieldsServer">
+        <div class="form-grid">
+          <div class="form-group">
+            <label id="i18n-modalDbHost">المضيف (Host)</label>
+            <input type="text" id="modalDbHost" class="form-input" value="localhost" spellcheck="false" dir="ltr">
+          </div>
+          <div class="form-group">
+            <label id="i18n-modalDbPort">المنفذ (Port)</label>
+            <input type="number" id="modalDbPort" class="form-input" value="1521" dir="ltr">
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label id="i18n-modalDbService">اسم الخدمة / قاعدة البيانات (Service Name / DB)</label>
+            <input type="text" id="modalDbService" class="form-input" value="orclpdb" spellcheck="false" dir="ltr" placeholder="orclpdb أو xe">
+          </div>
+          <div class="form-group">
+            <label id="i18n-modalDbUser">اسم المستخدم (Username)</label>
+            <input type="text" id="modalDbUser" class="form-input" value="TESTR" spellcheck="false" dir="ltr">
+          </div>
+        </div>
+        <div class="form-group">
+          <label id="i18n-modalDbPass">كلمة المرور (Password)</label>
+          <input type="password" id="modalDbPassword" class="form-input" value="TESTR" dir="ltr">
+        </div>
+      </div>
+
+      <div class="form-group" id="modalDbFieldsFile" style="display:none">
+        <label id="i18n-modalDbFile">مسار ملف SQLite (على الخادم)</label>
+        <input type="text" id="modalDbFilePath" class="form-input" spellcheck="false" dir="ltr" placeholder="C:\data\app.db">
+      </div>
+
+      <div style="display:flex; align-items:center; gap:8px; margin-top:2px;">
+        <input type="checkbox" id="modalDbSetDefault" style="cursor:pointer;" checked>
+        <label for="modalDbSetDefault" style="font-size:12px; color:var(--text-secondary); cursor:pointer;" id="i18n-modalDbSetDefault">
+          تعيين كمصدر أساسي وحفظ بيانات الاتصال في التطبيق
+        </label>
+      </div>
+
+      <div class="db-test-result" id="modalDbTestResult" style="display:none; white-space:pre-line;"></div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <button class="btn-tool" type="button" onclick="testModalDbConnection()" id="i18n-modalDbTestBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          <span class="btn-label-text">اختبار الاتصال</span>
+        </button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-tool btn-sm" type="button" onclick="toggleOracleConnectModal(false)" id="i18n-modalDbCancelBtn">إلغاء</button>
+          <button class="btn-tool btn-sm primary" type="button" onclick="connectModalDatabase()" id="i18n-modalDbConnectBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="btn-label-text">اتصال وجلب المخطط</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- RELATIONSHIP DETAILS MODAL -->
 <div class="modal-backdrop" id="relationshipModal" onclick="closeModalOnBackdrop(event)">
   <div class="modal-card rel-modal-card" onclick="event.stopPropagation()">
@@ -1558,6 +1725,78 @@ CREATE TABLE orders (
       <span class="ai-hint-dot">·</span>
       <span><kbd>Enter</kbd> إرسال</span>
     </div>
+  </div>
+</div>
+
+<!-- DELETE TABLE CONFIRMATION MODAL -->
+<div class="modal-overlay" id="deleteTableModal" style="display:none;" onclick="if(event.target===this) closeDeleteTableModal()">
+  <div class="settings-modal" style="max-width:480px; width:92%;">
+    <div class="settings-header">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:34px; height:34px; border-radius:8px; background:rgba(239,68,68,0.15); color:#ef4444; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </div>
+        <div>
+          <div id="deleteModalTitle" class="settings-modal-title">حذف الجدول</div>
+          <div id="deleteModalSubtitle" class="settings-modal-subtitle">اختر نطاق الحذف المناسب لهذا الجدول</div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeDeleteTableModal()" title="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div style="padding:18px 20px; display:flex; flex-direction:column; gap:12px;">
+      <p id="deleteModalMessage" style="font-size:13px; color:var(--text); margin:0 0 6px 0;">
+        أنت على وشك حذف الجدول: <b id="deleteModalTargetName" style="color:var(--accent); font-family:var(--font-mono);">TABLE_NAME</b>
+      </p>
+
+      <label class="delete-scope-card" id="scopeTabCard" style="display:flex; align-items:flex-start; gap:10px; padding:12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-card); cursor:pointer;">
+        <input type="radio" name="deleteScopeRadio" id="scopeTabRadio" value="tab_only" checked style="margin-top:3px;" />
+        <div>
+          <div style="font-weight:600; font-size:13px; color:var(--text);" id="i18n-delScopeTabTitle">حذف من هذا التبويب فقط</div>
+          <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;" id="i18n-delScopeTabDesc">يتم حذف الجدول وعلاقاته من مساحة العمل الحالية فقط، ويبقى محفوظاً في قاعدة البيانات والتبويبات الأخرى.</div>
+        </div>
+      </label>
+
+      <label class="delete-scope-card danger-scope" id="scopePermCard" style="display:flex; align-items:flex-start; gap:10px; padding:12px; border-radius:8px; border:1px solid rgba(239,68,68,0.3); background:rgba(239,68,68,0.04); cursor:pointer;">
+        <input type="radio" name="deleteScopeRadio" id="scopePermRadio" value="permanent" style="margin-top:3px;" />
+        <div>
+          <div style="font-weight:600; font-size:13px; color:#ef4444;" id="i18n-delScopePermTitle">حذف نهائي من التطبيق وقاعدة البيانات</div>
+          <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;" id="i18n-delScopePermDesc">حذف قطعي ودائم للجدول وعلاقاته من ذاكرة التطبيق وقاعدة بيانات SQLite وكافة التبويبات نهائياً.</div>
+        </div>
+      </label>
+    </div>
+
+    <div class="modal-footer" style="padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px;">
+      <button class="btn-tool btn-sm" onclick="closeDeleteTableModal()" id="i18n-delCancelBtn">إلغاء</button>
+      <button class="btn-tool btn-sm danger" id="delConfirmBtn" onclick="executePendingDelete()" style="background:#ef4444; color:#fff; border-color:#dc2626; font-weight:600;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span id="i18n-delConfirmBtnText">تأكيد الحذف</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TABLE CONTEXT MENU -->
+<div id="tableContextMenu" class="table-context-menu" style="display:none; position:fixed; z-index:99999;">
+  <div class="ctx-header" id="ctxMenuTableTitle">TABLE_NAME</div>
+  <div class="ctx-item" onclick="handleCtxInspect()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span id="i18n-ctxInspect">تفاصيل وتخصيص الحقول</span>
+  </div>
+  <div class="ctx-item" onclick="handleCtxHide()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+    <span id="i18n-ctxHide">إخفاء من المخطط</span>
+  </div>
+  <div class="ctx-item" onclick="handleCtxCopyName()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    <span id="i18n-ctxCopy">نسخ اسم الجدول</span>
+  </div>
+  <div class="ctx-divider"></div>
+  <div class="ctx-item danger" onclick="handleCtxDelete()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    <span id="i18n-ctxDelete" style="color:#ef4444; font-weight:600;">حذف الجدول نهائياً...</span>
   </div>
 </div>
 

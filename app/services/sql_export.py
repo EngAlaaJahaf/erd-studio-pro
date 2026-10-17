@@ -48,26 +48,26 @@ def convert_type(display, dialect):
 
     if base in ("varchar", "varchar2", "nvarchar2", "nvarchar", "char", "nchar", "character", "text", "clob"):
         if dialect == "oracle":
-            if base == "text":
+            if base in ("text", "clob"):
                 return "CLOB"
             if base in ("nvarchar2", "nchar"):
-                return f"{base.upper()}{params}"
+                return f"{base.upper()}{params or '(255)'}"
             if base == "char":
                 return f"CHAR{params or '(1)'}"
-            return f"VARCHAR2{params}"
+            return f"VARCHAR2{params or '(255)'}"
         if dialect == "mssql":
-            if base == "text":
+            if base in ("text", "clob"):
                 return "NVARCHAR(MAX)"
             if base in ("char", "nchar"):
                 return f"{base.upper()}{params or '(1)'}"
             return f"NVARCHAR{params or '(MAX)'}"
         if dialect == "sqlite":
             return "TEXT"
-        if base == "text":
-            return params.upper() if dialect != "postgres" else "TEXT"
-        if base in ("varchar2", "nvarchar2", "nvarchar"):
-            return f"VARCHAR{params}"
-        return f"{base.upper() if base != 'character' else 'CHAR'}{params}"
+        if base in ("text", "clob"):
+            return "LONGTEXT" if dialect == "mysql" else "TEXT"
+        if base in ("varchar2", "nvarchar2", "nvarchar", "varchar"):
+            return f"VARCHAR{params or '(255)'}"
+        return f"{base.upper() if base != 'character' else 'CHAR'}{params or '(1)'}"
 
     if base in ("int", "integer", "smallint", "bigint", "mediumint", "tinyint", "number", "decimal", "numeric", "float", "double", "real"):
         if dialect == "oracle":
@@ -82,10 +82,35 @@ def convert_type(display, dialect):
             if base in ("number", "decimal", "numeric"):
                 return f"NUMBER{params if params else ''}"
             return f"NUMBER{params}"
-        if base == "number":
-            return f"DECIMAL{params if params else ''}" if dialect != "mysql" else f"DECIMAL{params or '(10,2)'}"
-        if base in ("decimal", "numeric"):
-            return f"{base.upper()}{params}"
+
+        if base in ("number", "decimal", "numeric"):
+            p_clean = params.strip("()").strip() if params else ""
+            if not p_clean:
+                return "NUMERIC" if dialect in ("postgres", "ansi") else ("DECIMAL(18,2)" if dialect in ("mysql", "mssql") else "NUMERIC")
+            if "," in p_clean:
+                return f"NUMERIC({p_clean})" if dialect in ("postgres", "ansi") else f"DECIMAL({p_clean})"
+            try:
+                prec = int(p_clean)
+                if prec == 1:
+                    if dialect == "postgres":
+                        return "BOOLEAN"
+                    if dialect == "mysql":
+                        return "TINYINT(1)"
+                    if dialect == "mssql":
+                        return "BIT"
+                    if dialect == "sqlite":
+                        return "INTEGER"
+                elif prec <= 4:
+                    return "SMALLINT"
+                elif prec <= 9:
+                    return "INTEGER" if dialect != "mysql" else "INT"
+                elif prec <= 18:
+                    return "BIGINT"
+                else:
+                    return f"NUMERIC({prec})" if dialect in ("postgres", "ansi") else f"DECIMAL({prec})"
+            except ValueError:
+                pass
+            return f"NUMERIC{params}" if dialect in ("postgres", "ansi") else f"DECIMAL{params}"
         if base in ("int", "integer", "smallint", "bigint", "mediumint", "tinyint"):
             return base.upper() if dialect != "mysql" else base
         if base == "double":
@@ -144,7 +169,9 @@ def generate_ddl(tables_data, fk_list, dialect="mysql", include_drop=True, separ
 
     fk_by_child = {}
     for f in fk_list:
-        fk_by_child.setdefault(f["child"], []).append(f)
+        c = f.get("child") or f.get("child_table")
+        if c:
+            fk_by_child.setdefault(c, []).append(f)
 
     parts = {}
     for t in sorted(tables):
@@ -167,15 +194,17 @@ def generate_ddl(tables_data, fk_list, dialect="mysql", include_drop=True, separ
         if pks:
             body_lines.append(f"  PRIMARY KEY ({', '.join(_ident(dialect, p) for p in pks)})")
         for f in fk_by_child.get(t, []):
-            fk_name = f.get("fk") or f"FK_{f['child']}_{f['parent']}"
-            child_cols = [c.strip() for c in (f.get("cols") or "").split(",") if c.strip()]
-            parent_cols = [c.strip() for c in (f.get("pcols") or "").split(",") if c.strip()]
+            child_name = f.get("child") or f.get("child_table", t)
+            parent_name = f.get("parent") or f.get("parent_table", "")
+            fk_name = f.get("fk") or f.get("fk_name") or f"FK_{child_name}_{parent_name}"
+            child_cols = [c.strip() for c in (f.get("cols") or f.get("child_col") or "").split(",") if c.strip()]
+            parent_cols = [c.strip() for c in (f.get("pcols") or f.get("parent_col") or "").split(",") if c.strip()]
             if not parent_cols:
                 parent_cols = child_cols
             body_lines.append(
                 f"  CONSTRAINT {_ident(dialect, fk_name)} FOREIGN KEY "
                 f"({', '.join(_ident(dialect, c) for c in child_cols)}) "
-                f"REFERENCES {_table_ident(dialect, f['parent'])} "
+                f"REFERENCES {_table_ident(dialect, parent_name)} "
                 f"({', '.join(_ident(dialect, c) for c in parent_cols)})"
             )
         lines.append(",\n".join(body_lines))

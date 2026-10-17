@@ -47,15 +47,17 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
     # Build a fast FK lookup: (child_table, child_col) → {parent, parent_col}
     fk_map = {}
     for f in fk_list:
-        parent = f.get("parent", "")
-        for col in (f.get("cols") or "").split(","):
+        parent = (f.get("parent") or f.get("parent_table") or "").upper().strip()
+        child = (f.get("child") or f.get("child_table") or "").upper().strip()
+        cols = str(f.get("cols") or f.get("child_col") or f.get("childCol") or "").strip()
+        for col in cols.split(","):
             col = col.strip()
-            if col:
-                fk_map[(f.get("child", ""), col)] = parent
+            if col and child:
+                fk_map[(child, col.upper())] = parent
 
     for tname in sorted(tables_data.keys()):
         data = tables_data[tname]
-        pks = set(data.get("pks") or [])
+        pks = {str(p).upper() for p in (data.get("pks") or [])}
         columns = data.get("columns") or []
 
         ws = wb.create_sheet(title=tname[:31])
@@ -86,7 +88,7 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
         for ri, col in enumerate(columns, start=1):
             cname = col.get("name", "")
             base, params = _split_type(col.get("type", ""))
-            parent = fk_map.get((tname, cname), "")
+            parent = fk_map.get((tname.upper(), cname.upper()), "")
             caption = col.get("caption") if (col.get("caption") and col.get("caption") != "-") else (col.get("comment") or "-")
             description = col.get("description") if (col.get("description") and col.get("description") != "-") else (col.get("comment") or "-")
             unique_mark = "✓" if col.get("unique") else ""
@@ -98,7 +100,7 @@ def build_workbook_bytes(tables_data: dict, fk_list: list) -> bytes:
                 caption,                                    # Caption / prompt
                 base,                                       # Data type
                 params if params else "-",                  # Length
-                "✓" if cname in pks else "",                # PK
+                "✓" if cname.upper() in pks else "",        # PK
                 "✓" if not col.get("nullable", True) else "",  # M
                 unique_mark,                                # U
                 "",                                         # I (not tracked)

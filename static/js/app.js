@@ -97,6 +97,8 @@ const i18n = {
     sideTables: "الجداول",
     newPageTitle: "صفحة جديدة",
     newPageSub: "اختر مصدر البيانات الذي ستعرضه هذه الصفحة",
+    srcBlank: "تبويب فارغ جديد (مخطط نظيف)",
+    srcBlankSub: "إنشاء مساحة عمل فارغة تماماً دون أي جداول، للبدء من الصفر أو رسم مخطط جديد.",
     srcOracle: "اتصال Oracle مباشر",
     srcOracleSub: "جلب المخطط مباشرة من قاعدة البيانات المتصلة (نسخة قابلة للتعديل).",
     srcSql: "ملف SQL / DDL",
@@ -245,6 +247,8 @@ const i18n = {
     sideTables: "Tables",
     newPageTitle: "New Page",
     newPageSub: "Choose the data source this page will display",
+    srcBlank: "New Blank Workspace",
+    srcBlankSub: "Create an empty canvas with zero tables to start fresh or design from scratch.",
  srcOracle: " Direct Oracle connection",
     srcOracleSub: "Fetch the schema straight from the connected database (editable copy).",
  srcSql: " SQL / DDL file",
@@ -728,24 +732,47 @@ function toggleRelLegend() {
 
 // Save Full State to SQLite Backend & LocalStorage
 async function saveStateToSQLite(showToastMsg = true) {
+  const curWs = workspaces.find(w => w.id === activeWorkspaceId);
+  if (curWs) _captureCurrentInto(curWs);
+  _saveWorkspacesLocal();
+
   const customColsPlain = {};
   Object.keys(tableCustomHiddenCols).forEach(k => {
     customColsPlain[k] = Array.from(tableCustomHiddenCols[k]);
   });
 
+  const settingsPayload = {
+    current_theme: currentTheme,
+    current_lang: currentLang,
+    global_view_mode: globalViewMode,
+    zoom: zoom.toString(),
+    pan_x: panX.toString(),
+    pan_y: panY.toString(),
+    is_sidebar_collapsed: isSidebarCollapsed ? "1" : "0"
+  };
+
+  // If active tab is not the primary oracle schema, do not clobber SQLite table_states
+  if (curWs && curWs.source !== 'oracle') {
+    try {
+      localStorage.setItem('erd_theme', currentTheme);
+      localStorage.setItem('erd_lang', currentLang);
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: settingsPayload })
+      });
+      if (showToastMsg) {
+        showToast(currentLang === 'ar' ? 'تم حفظ مساحة العمل محلياً' : 'Workspace saved locally');
+      }
+    } catch(e) {}
+    return;
+  }
+
   const statePayload = {
     positions: tablePositions,
     hidden_cols: customColsPlain,
     visible_tables: Array.from(selectedTables),
-    settings: {
-      current_theme: currentTheme,
-      current_lang: currentLang,
-      global_view_mode: globalViewMode,
-      zoom: zoom.toString(),
-      pan_x: panX.toString(),
-      pan_y: panY.toString(),
-      is_sidebar_collapsed: isSidebarCollapsed ? "1" : "0"
-    }
+    settings: settingsPayload
   };
 
   // 1. Mirror to localStorage
@@ -769,11 +796,11 @@ async function saveStateToSQLite(showToastMsg = true) {
       body: JSON.stringify(statePayload)
     });
     if (res.ok && showToastMsg) {
- const msg = currentLang === 'ar' ? ' تم حفظ الترتيب في قاعدة بيانات SQLite' : ' Saved to SQLite Database!';
+      const msg = currentLang === 'ar' ? ' تم حفظ الترتيب في قاعدة بيانات SQLite' : ' Saved to SQLite Database!';
       showToast(msg);
     }
   } catch (err) {
- if (showToastMsg) showToast(currentLang === 'ar' ? ' تم الحفظ محلياً' : ' Saved locally');
+    if (showToastMsg) showToast(currentLang === 'ar' ? ' تم الحفظ محلياً' : ' Saved locally');
   }
 }
 
@@ -808,13 +835,18 @@ async function syncWithOracleDB() {
         throw new Error(dbConnectionError);
       }
     } else {
+      let errDetail = 'Sync failed - check DB connection';
+      try {
+        const errJson = await res.json();
+        errDetail = errJson.detail || errJson.error || errDetail;
+      } catch(e) {}
       isDbConnected = false;
-      dbConnectionError = 'Sync failed - check DB connection';
+      dbConnectionError = errDetail;
       if (typeof updateStatusBar === 'function') updateStatusBar();
       throw new Error(dbConnectionError);
     }
   } catch (err) {
- showToast(' ' + err.message);
+    showToast('❌ ' + err.message);
   }
 }
 
@@ -956,6 +988,7 @@ let workspaces = [];
 let activeWorkspaceId = null;
 const WS_KEY = 'testr_erd_workspaces_v2';
 const WS_ICONS = {
+  blank: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
   oracle: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
   sql: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
   xlsx: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',
@@ -964,22 +997,23 @@ const WS_ICONS = {
   duplicate: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   saved: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>'
 };
-const WS_NAMES_AR = { oracle: 'أوراكل', sql: 'ملف SQL', xlsx: 'قاموس بيانات', 'agent-code': 'كود الوكيل', paste: 'DDL ملصق', duplicate: 'نسخة', saved: 'نسخة محفوظة' };
-const WS_NAMES_EN = { oracle: 'Oracle', sql: 'SQL', xlsx: 'Dictionary', 'agent-code': 'Agent DDL', paste: 'Pasted DDL', duplicate: 'Copy', saved: 'Restored' };
+const WS_NAMES_AR = { blank: 'فارغ', oracle: 'أوراكل', sql: 'ملف SQL', xlsx: 'قاموس بيانات', 'agent-code': 'كود الوكيل', paste: 'DDL ملصق', duplicate: 'نسخة', saved: 'نسخة محفوظة' };
+const WS_NAMES_EN = { blank: 'Blank', oracle: 'Oracle', sql: 'SQL', xlsx: 'Dictionary', 'agent-code': 'Agent DDL', paste: 'Pasted DDL', duplicate: 'Copy', saved: 'Restored' };
 function _wsObj(id, cfg) {
   cfg = cfg || {};
+  var isBlank = cfg.source === 'blank';
   return {
     id: id,
     name: cfg.name || 'صفحة جديدة',
-    source: cfg.source || 'oracle',
-    tablesData: cfg.tablesData || null,
+    source: cfg.source || (isBlank ? 'blank' : 'oracle'),
+    tablesData: cfg.tablesData || {},
     fkList: cfg.fkList || [],
     allTables: cfg.allTables || [],
     comTables: cfg.comTables || [],
     rafTables: cfg.rafTables || [],
-    selectedTables: cfg.selectedTables || (selectedTables && selectedTables.size > 0 ? new Set(selectedTables) : new Set()),
-    selectedTableNodes: cfg.selectedTableNodes || new Set(),
-    tablePositions: cfg.tablePositions || (tablePositions && Object.keys(tablePositions).length > 0 ? JSON.parse(JSON.stringify(tablePositions)) : {}),
+    selectedTables: cfg.selectedTables !== undefined ? (cfg.selectedTables instanceof Set ? new Set(cfg.selectedTables) : new Set(cfg.selectedTables)) : (isBlank ? new Set() : (selectedTables && selectedTables.size > 0 ? new Set(selectedTables) : new Set())),
+    selectedTableNodes: cfg.selectedTableNodes !== undefined ? (cfg.selectedTableNodes instanceof Set ? new Set(cfg.selectedTableNodes) : new Set(cfg.selectedTableNodes)) : new Set(),
+    tablePositions: cfg.tablePositions !== undefined ? JSON.parse(JSON.stringify(cfg.tablePositions)) : (isBlank ? {} : (tablePositions && Object.keys(tablePositions).length > 0 ? JSON.parse(JSON.stringify(tablePositions)) : {})),
     tableCustomHiddenCols: cfg.tableCustomHiddenCols || {},
     subsystemData: cfg.subsystemData || null,
     subsystemMapping: cfg.subsystemMapping || {},
@@ -1008,26 +1042,16 @@ function _applyWorkspaceToGlobal(w) {
   const exportPreview = document.getElementById('exportPreview');
   if (exportPreview) { exportPreview.value = ''; exportPreview.style.display = 'none'; }
 
-  // If workspace has no tables, but live schema or global tablesData has tables, salvage them!
-  if (!w.tablesData || Object.keys(w.tablesData).length === 0) {
+  // CRITICAL: Only salvage live schema for initial primary oracle workspace on cold start if empty.
+  // NEVER salvage tables into a blank tab or a tab that was intentionally emptied!
+  if (w.source === 'oracle' && (!w.tablesData || Object.keys(w.tablesData).length === 0)) {
     if (window._liveSchema && window._liveSchema.tablesData && Object.keys(window._liveSchema.tablesData).length > 0) {
-      w.tablesData = window._liveSchema.tablesData;
-      w.fkList = window._liveSchema.fkList || [];
+      w.tablesData = JSON.parse(JSON.stringify(window._liveSchema.tablesData));
+      w.fkList = JSON.parse(JSON.stringify(window._liveSchema.fkList || []));
       w.allTables = Object.keys(w.tablesData);
-    } else if (tablesData && Object.keys(tablesData).length > 0) {
-      w.tablesData = tablesData;
-      w.fkList = fkList || [];
-      w.allTables = allTables || Object.keys(tablesData);
+      w.comTables = w.allTables.filter(function(t) { return t.indexOf('COM_') === 0; });
+      w.rafTables = w.allTables.filter(function(t) { return t.indexOf('RAF_') === 0; });
     }
-  }
-
-  // Oracle workspace always reflects the live database schema
-  if (w.source === 'oracle' && window._liveSchema && window._liveSchema.tablesData && Object.keys(window._liveSchema.tablesData).length > 0) {
-    w.tablesData = window._liveSchema.tablesData;
-    w.fkList = window._liveSchema.fkList;
-    w.allTables = Object.keys(w.tablesData);
-    w.comTables = w.allTables.filter(function(t) { return t.indexOf('COM_') === 0; });
-    w.rafTables = w.allTables.filter(function(t) { return t.indexOf('RAF_') === 0; });
   }
 
   tablesData = w.tablesData || {};
@@ -1036,25 +1060,27 @@ function _applyWorkspaceToGlobal(w) {
   comTables = w.comTables || allTables.filter(function(t) { return t.indexOf('COM_') === 0; });
   rafTables = w.rafTables || allTables.filter(function(t) { return t.indexOf('RAF_') === 0; });
 
-  // Safeguard selectedTables: never discard existing selectedTables if workspace has empty or default
-  if (w.selectedTables && ((w.selectedTables instanceof Set && w.selectedTables.size > 0) || (Array.isArray(w.selectedTables) && w.selectedTables.length > 0))) {
-    selectedTables = (w.selectedTables instanceof Set) ? new Set(w.selectedTables) : new Set(w.selectedTables);
-  } else if (selectedTables && selectedTables.size > 0) {
-    w.selectedTables = new Set(selectedTables);
-  } else if (allTables.length > 0) {
-    selectedTables = new Set(allTables);
-    w.selectedTables = new Set(allTables);
-  }
-
-  selectedTableNodes = (w.selectedTableNodes instanceof Set) ? new Set(w.selectedTableNodes) : new Set(Array.isArray(w.selectedTableNodes) ? w.selectedTableNodes : []);
-
-  // Safeguard tablePositions: never wipe existing loaded positions with an empty object!
-  if (w.tablePositions && Object.keys(w.tablePositions).length > 0) {
-    tablePositions = JSON.parse(JSON.stringify(w.tablePositions));
-  } else if (tablePositions && Object.keys(tablePositions).length > 0) {
-    w.tablePositions = JSON.parse(JSON.stringify(tablePositions));
+  if (w.source === 'blank') {
+    selectedTables = (w.selectedTables instanceof Set) ? w.selectedTables : new Set(w.selectedTables || []);
+    selectedTableNodes = (w.selectedTableNodes instanceof Set) ? w.selectedTableNodes : new Set(w.selectedTableNodes || []);
+    tablePositions = w.tablePositions ? JSON.parse(JSON.stringify(w.tablePositions)) : {};
   } else {
-    tablePositions = {};
+    if (w.selectedTables && ((w.selectedTables instanceof Set && w.selectedTables.size > 0) || (Array.isArray(w.selectedTables) && w.selectedTables.length > 0))) {
+      selectedTables = (w.selectedTables instanceof Set) ? new Set(w.selectedTables) : new Set(w.selectedTables);
+    } else if (allTables.length > 0) {
+      selectedTables = new Set(allTables);
+      w.selectedTables = new Set(allTables);
+    } else {
+      selectedTables = new Set();
+    }
+
+    selectedTableNodes = (w.selectedTableNodes instanceof Set) ? new Set(w.selectedTableNodes) : new Set(Array.isArray(w.selectedTableNodes) ? w.selectedTableNodes : []);
+
+    if (w.tablePositions && Object.keys(w.tablePositions).length > 0) {
+      tablePositions = JSON.parse(JSON.stringify(w.tablePositions));
+    } else {
+      tablePositions = {};
+    }
   }
 
   tableCustomHiddenCols = {};
@@ -1165,8 +1191,12 @@ function renderWsBar() {
       '<span class="select-prefix-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span>' +
       '<select class="select-clean with-prefix-icon" id="quickActionSelect" aria-label="Quick Actions" onchange="runQuickAction(this.value); this.value=\'\';">' +
         '<option value="">' + (isRTL ? '⋯ المزيد...' : '⋯ More...') + '</option>' +
+        '<option value="new_blank">' + (isRTL ? '📄 تبويب فارغ جديد' : '📄 New Blank Tab') + '</option>' +
+        '<option value="clear_tab">' + (isRTL ? '🧹 تفريغ جداول هذا التبويب' : '🧹 Clear Current Tab') + '</option>' +
+        '<option value="clear_all_perm">' + (isRTL ? '💥 تفريغ كافة الجداول نهائياً' : '💥 Clear All Tables Permanently') + '</option>' +
         '<option value="audit_linter">' + (isRTL ? '🔍 فاحص الجودة المعمارية (Linter)' : '🔍 Schema Architecture Linter') + '</option>' +
         '<option value="audit_diff">' + (isRTL ? '⚖️ مقارنة المخططات والترقية (Diff)' : '⚖️ Schema Diff & Migration') + '</option>' +
+        '<option value="audit_convert">' + (isRTL ? '🔄 محول لهجات SQL (Transpiler)' : '🔄 SQL Dialect Transpiler') + '</option>' +
         '<option value="audit_mock">' + (isRTL ? '🎲 توليد بيانات تجريبية (Mock Data)' : '🎲 Smart Mock Data Generator') + '</option>' +
         '<option value="report_html">' + (isRTL ? '📊 تقرير HTML تفاعلي (.html)' : '📊 Interactive HTML Report (.html)') + '</option>' +
         '<option value="report_pdf">' + (isRTL ? '📑 تقرير PDF معماري (.pdf)' : '📑 Executive PDF Report (.pdf)') + '</option>' +
@@ -1331,6 +1361,14 @@ async function initWorkspaces() {
       } else {
         oracleWs.selectedTables = new Set(liveAll);
       }
+    } else {
+      oracleWs.tablesData = {};
+      oracleWs.fkList = [];
+      oracleWs.allTables = [];
+      oracleWs.comTables = [];
+      oracleWs.rafTables = [];
+      oracleWs.selectedTables = new Set();
+      oracleWs.tablePositions = {};
     }
     // If oracleWs has no positions or empty positions, but we have positions from SQLite, sync them!
     if ((!oracleWs.tablePositions || Object.keys(oracleWs.tablePositions).length === 0) && tablePositions && Object.keys(tablePositions).length > 0) {
@@ -1386,7 +1424,7 @@ async function initWorkspaces() {
   }
 
   var activeWs = workspaces.find(function(w) { return w.id === activeWorkspaceId; }) || workspaces[0];
-  if ((!activeWs.tablesData || Object.keys(activeWs.tablesData).length === 0) && oracleWs && oracleWs.tablesData && Object.keys(oracleWs.tablesData).length > 0) {
+  if (activeWs.source !== 'blank' && (!activeWs.tablesData || Object.keys(activeWs.tablesData).length === 0) && oracleWs && oracleWs.tablesData && Object.keys(oracleWs.tablesData).length > 0) {
     activeWs = oracleWs;
     activeWorkspaceId = oracleWs.id;
   }
@@ -1413,6 +1451,13 @@ function toggleNewPageModal(show) {
   var grid = document.createElement('div');
   grid.className = 'newpage-grid';
   var cards = [
+    {
+      src: 'blank',
+      ico: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+      name: t.srcBlank || (currentLang === 'ar' ? 'تبويب فارغ جديد (مخطط نظيف)' : 'New Blank Workspace'),
+      sub: t.srcBlankSub || (currentLang === 'ar' ? 'إنشاء مساحة عمل فارغة تماماً بدون أي جداول، للبدء من الصفر أو تصميم مخطط مستقل.' : 'Create an empty canvas with zero tables to start fresh or design from scratch.'),
+      fn: function(){ toggleNewPageModal(false); createPageBlank(); }
+    },
     {
       src: 'oracle',
       ico: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
@@ -1451,25 +1496,211 @@ function toggleNewPageModal(show) {
   });
   list.appendChild(grid);
 }
-function createPageOracle() {
-  var w = _wsObj(_nextWsId(), { name: (currentLang === 'ar') ? 'أوراكل' : 'Oracle', source: 'oracle' });
-  w.tablesData = JSON.parse(JSON.stringify(tablesData || {}));
-  w.fkList = JSON.parse(JSON.stringify(fkList || []));
-  w.allTables = allTables.slice(); w.comTables = comTables.slice(); w.rafTables = rafTables.slice();
-  w.selectedTables = new Set(selectedTables); w.selectedTableNodes = new Set(selectedTableNodes);
-  w.tablePositions = JSON.parse(JSON.stringify(tablePositions || {}));
-  w.tableCustomHiddenCols = {};
-  Object.keys(tableCustomHiddenCols || {}).forEach(function(k) { w.tableCustomHiddenCols[k] = new Set(tableCustomHiddenCols[k]); });
-  w.subsystemData = subsystemData; w.subsystemMapping = subsystemMapping;
-  w.viewMode = globalViewMode; w.zoom = zoom; w.tableWidth = TABLE_WIDTH; w.dialect = window.currentDialect || 'oracle';
+function createPageBlank() {
+  var isRTL = currentLang === 'ar';
+  var blankNum = workspaces.filter(function(w){ return w.source === 'blank'; }).length + 1;
+  var w = _wsObj(_nextWsId(), {
+    name: (isRTL ? 'مخطط فارغ ' : 'Blank Canvas ') + blankNum,
+    source: 'blank',
+    tablesData: {},
+    fkList: [],
+    allTables: [],
+    comTables: [],
+    rafTables: [],
+    selectedTables: new Set(),
+    selectedTableNodes: new Set(),
+    tablePositions: {},
+    tableCustomHiddenCols: {},
+    subsystemData: null,
+    subsystemMapping: {},
+    viewMode: 'no-audit',
+    zoom: 0.85,
+    dialect: window.currentDialect || 'oracle',
+  });
   workspaces.push(w);
   activeWorkspaceId = w.id;
   _applyWorkspaceToGlobal(w);
-  buildSidebarList(); updateSubsysFilterOptions(); renderLegend();
-  calculateInitialLayout('hierarchical'); renderAll(); setTimeout(fitView, 60);
-  _saveWorkspacesLocal(); renderWsBar();
+  buildSidebarList();
+  updateSubsysFilterOptions();
+  renderLegend();
+  renderAll();
+  setTimeout(fitView, 60);
+  _saveWorkspacesLocal();
+  renderWsBar();
   if (currentView !== 'canvas') switchView('canvas');
+  showToast(isRTL ? 'تم إنشاء تبويب فارغ جديد بنجاح' : 'Created new blank tab');
 }
+function createPageOracle() {
+  toggleOracleConnectModal(true);
+}
+
+function toggleOracleConnectModal(show) {
+  var modal = document.getElementById('oracleConnectModal');
+  if (!modal) return;
+  modal.style.display = show ? 'flex' : 'none';
+  if (show) {
+    var d = (document.getElementById('dbDialect') || {}).value || dbCfg.dialect || 'oracle';
+    var sel = document.getElementById('modalDbDialect');
+    if (sel) sel.value = d;
+    toggleModalDbFields();
+
+    var hostIn = document.getElementById('modalDbHost');
+    var portIn = document.getElementById('modalDbPort');
+    var srvIn = document.getElementById('modalDbService');
+    var userIn = document.getElementById('modalDbUser');
+    var pwdIn = document.getElementById('modalDbPassword');
+
+    if (hostIn && document.getElementById('dbHost')) hostIn.value = document.getElementById('dbHost').value || 'localhost';
+    if (portIn && document.getElementById('dbPort')) portIn.value = document.getElementById('dbPort').value || '1521';
+    if (srvIn && document.getElementById('dbService')) srvIn.value = document.getElementById('dbService').value || 'orclpdb';
+    if (userIn && document.getElementById('dbUser')) userIn.value = document.getElementById('dbUser').value || 'TESTR';
+    if (pwdIn && document.getElementById('dbPassword')) pwdIn.value = document.getElementById('dbPassword').value || '';
+
+    var resEl = document.getElementById('modalDbTestResult');
+    if (resEl) {
+      resEl.className = 'db-test-result';
+      resEl.textContent = '';
+      resEl.style.display = 'none';
+    }
+  }
+}
+
+function toggleModalDbFields() {
+  var d = (document.getElementById('modalDbDialect') || {}).value || 'oracle';
+  var isFile = d === 'sqlite_file';
+  var srvBox = document.getElementById('modalDbFieldsServer');
+  var fileBox = document.getElementById('modalDbFieldsFile');
+  if (srvBox) srvBox.style.display = isFile ? 'none' : 'block';
+  if (fileBox) fileBox.style.display = isFile ? 'block' : 'none';
+
+  var portIn = document.getElementById('modalDbPort');
+  if (portIn) {
+    if (d === 'mysql' && (portIn.value === '1521' || !portIn.value)) portIn.value = '3306';
+    if (d === 'postgres' && (portIn.value === '1521' || !portIn.value)) portIn.value = '5432';
+    if (d === 'mssql' && (portIn.value === '1521' || !portIn.value)) portIn.value = '1433';
+    if (d === 'oracle' && (portIn.value === '3306' || portIn.value === '5432' || portIn.value === '1433' || !portIn.value)) portIn.value = '1521';
+  }
+}
+
+function modalDbParamsFromForm() {
+  var d = (document.getElementById('modalDbDialect') || {}).value || 'oracle';
+  var userIn = document.getElementById('modalDbUser');
+  var params = { user: userIn ? userIn.value.trim() : '' };
+  var pwdIn = document.getElementById('modalDbPassword');
+  if (pwdIn && pwdIn.value) params.password = pwdIn.value;
+  if (d === 'sqlite_file') {
+    var pathIn = document.getElementById('modalDbFilePath');
+    params.path = pathIn ? pathIn.value.trim() : '';
+  } else {
+    var hostIn = document.getElementById('modalDbHost');
+    var portIn = document.getElementById('modalDbPort');
+    var srvIn = document.getElementById('modalDbService');
+    params.host = hostIn ? hostIn.value.trim() : 'localhost';
+    params.port = parseInt((portIn && portIn.value) ? portIn.value : '1521', 10);
+    if (d === 'oracle') {
+      params.service_name = srvIn ? srvIn.value.trim() : 'orclpdb';
+    } else {
+      params.database = srvIn ? srvIn.value.trim() : '';
+    }
+  }
+  return params;
+}
+
+async function testModalDbConnection() {
+  var resEl = document.getElementById('modalDbTestResult');
+  if (!resEl) return;
+  resEl.style.display = 'block';
+  resEl.className = 'db-test-result loading';
+  resEl.textContent = currentLang === 'ar' ? '⏳ جاري اختبار الاتصال بقاعدة البيانات...' : '⏳ Testing database connection...';
+
+  var d = (document.getElementById('modalDbDialect') || {}).value || 'oracle';
+  var params = modalDbParamsFromForm();
+
+  try {
+    var res = await fetch('/api/connectors/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dialect: d, params: params })
+    });
+    var data = await res.json();
+    resEl.className = 'db-test-result';
+    if (data.success) {
+      resEl.classList.add('ok');
+      var msg = currentLang === 'ar' ? '✅ الاتصال ناجح بقاعدة البيانات!' : '✅ Database connection successful!';
+      if (data.tablesFound != null) msg += `\n${currentLang === 'ar' ? 'عدد الجداول المكتشفة' : 'Tables found'}: ${data.tablesFound}`;
+      if (data.latencyMs) msg += `\n${currentLang === 'ar' ? 'زمن الاستجابة' : 'Latency'}: ${data.latencyMs} ms`;
+      resEl.textContent = msg;
+    } else {
+      resEl.classList.add('fail');
+      resEl.textContent = (currentLang === 'ar' ? '❌ فشل الاتصال بقاعدة البيانات:\n' : '❌ Connection failed:\n') + (data.error || 'Unknown error');
+    }
+  } catch (err) {
+    resEl.className = 'db-test-result fail';
+    resEl.textContent = (currentLang === 'ar' ? '❌ خطأ أثناء الاتصال:\n' : '❌ Connection error:\n') + err.message;
+  }
+}
+
+async function connectModalDatabase() {
+  var d = (document.getElementById('modalDbDialect') || {}).value || 'oracle';
+  var params = modalDbParamsFromForm();
+  var isRTL = currentLang === 'ar';
+  var resEl = document.getElementById('modalDbTestResult');
+
+  showToast(isRTL ? '⏳ جاري الاتصال بقاعدة البيانات وجلب المخطط...' : '⏳ Connecting and loading schema...');
+  try {
+    var res = await fetch('/api/connectors/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dialect: d, params: params })
+    });
+    var data = await res.json();
+    if (!data.success) {
+      var err = data.error || data.detail || 'Connection failed';
+      if (resEl) {
+        resEl.style.display = 'block';
+        resEl.className = 'db-test-result fail';
+        resEl.textContent = (isRTL ? '❌ فشل الاتصال بقاعدة البيانات:\n' : '❌ Connection failed:\n') + err;
+      }
+      throw new Error(err);
+    }
+
+    var isDef = (document.getElementById('modalDbSetDefault') || {}).checked;
+    if (isDef) {
+      applySchemaPayload(data);
+      dbCfg.dialect = d;
+      if (d === 'sqlite_file') {
+        dbCfg.file = params.path;
+      } else {
+        dbCfg.host = params.host;
+        dbCfg.port = params.port;
+        dbCfg.service = params.service_name || params.database;
+        dbCfg.user = params.user;
+      }
+      if (document.getElementById('dbHost')) document.getElementById('dbHost').value = dbCfg.host || 'localhost';
+      if (document.getElementById('dbPort')) document.getElementById('dbPort').value = dbCfg.port || 1521;
+      if (document.getElementById('dbService')) document.getElementById('dbService').value = dbCfg.service || 'orclpdb';
+      if (document.getElementById('dbUser')) document.getElementById('dbUser').value = dbCfg.user || 'TESTR';
+      if (document.getElementById('dbPassword')) document.getElementById('dbPassword').value = params.password || '';
+      saveDbSettings();
+      await refreshCurrentSchemaInfo();
+    }
+
+    var sName = params.service_name || params.database || (d === 'sqlite_file' ? 'SQLite' : 'Live');
+    var tabName = (d === 'oracle' ? 'أوراكل' : d.toUpperCase()) + ' (' + sName + ')';
+    createWorkspaceFromPayload({
+      name: tabName,
+      source: d,
+      schema: data.schema,
+      subsystems: data.subsystems
+    });
+
+    toggleOracleConnectModal(false);
+    showToast(isRTL ? `✅ تم الاتصال وجلب ${data.schema.tableCount} جدول بنجاح` : `✅ Connected and loaded ${data.schema.tableCount} tables`);
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  }
+}
+
 function createPageSql() {
   var input = document.createElement('input');
   input.type = 'file'; input.accept = '.sql,.ddl,.txt';
@@ -1556,6 +1787,369 @@ window.applyAgentCode = applyAgentCode;
 window.toggleNewPageModal = toggleNewPageModal;
 window.activateWorkspace = activateWorkspace;
 window.openNewPageFromModal = function(src) { toggleNewPageModal(true); };
+window.createPageBlank = createPageBlank;
+
+// ==================== TABLE DELETION & CONTEXT MENU ====================
+let pendingDeleteTable = null;
+let currentModalTable = null;
+let activeContextMenuTable = null;
+
+function confirmDeleteTable(tableName) {
+  if (!tableName) return;
+  pendingDeleteTable = String(tableName).toUpperCase().trim();
+  const modal = document.getElementById('deleteTableModal');
+  const targetSpan = document.getElementById('deleteModalTargetName');
+  if (targetSpan) targetSpan.textContent = pendingDeleteTable;
+  const radioTab = document.getElementById('scopeTabRadio');
+  if (radioTab) radioTab.checked = true;
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeDeleteTableModal() {
+  const modal = document.getElementById('deleteTableModal');
+  if (modal) modal.style.display = 'none';
+  pendingDeleteTable = null;
+}
+
+function executePendingDelete() {
+  if (!pendingDeleteTable) return;
+  const isPermanent = !!document.getElementById('scopePermRadio')?.checked;
+  const target = pendingDeleteTable;
+  closeDeleteTableModal();
+  deleteTableAction(target, isPermanent ? 'permanent' : 'tab_only');
+}
+
+function confirmDeleteCurrentModalTable() {
+  if (!currentModalTable) return;
+  const target = currentModalTable;
+  closeColumnModal();
+  confirmDeleteTable(target);
+}
+
+function deleteSelectedTableFromBar() {
+  if (selectedTableNodes.size === 1) {
+    const target = Array.from(selectedTableNodes)[0];
+    confirmDeleteTable(target);
+  }
+}
+
+function deleteMultiSelectedTablesFromBar() {
+  if (selectedTableNodes.size === 0) return;
+  const targets = Array.from(selectedTableNodes);
+  const isRTL = currentLang === 'ar';
+  const msg = isRTL
+    ? `هل أنت متأكد من حذف ${targets.length} جداول محددة نهائياً من التطبيق وقاعدة البيانات؟`
+    : `Are you sure you want to permanently delete ${targets.length} selected tables from application and database?`;
+  if (!confirm(msg)) return;
+
+  targets.forEach(t => {
+    delete tablesData[t];
+    allTables = allTables.filter(x => x !== t);
+    comTables = comTables.filter(x => x !== t);
+    rafTables = rafTables.filter(x => x !== t);
+    selectedTables.delete(t);
+    selectedTableNodes.delete(t);
+    delete tablePositions[t];
+    delete tableCustomHiddenCols[t];
+    fkList = fkList.filter(f => f.child !== t && f.parent !== t);
+
+    if (window._liveSchema && window._liveSchema.tablesData) {
+      delete window._liveSchema.tablesData[t];
+      window._liveSchema.fkList = (window._liveSchema.fkList || []).filter(f => f.child !== t && f.parent !== t);
+    }
+    workspaces.forEach(w => {
+      if (w.tablesData && w.tablesData[t]) {
+        delete w.tablesData[t];
+        w.allTables = (w.allTables || []).filter(x => x !== t);
+        w.comTables = (w.comTables || []).filter(x => x !== t);
+        w.rafTables = (w.rafTables || []).filter(x => x !== t);
+        if (w.selectedTables instanceof Set) w.selectedTables.delete(t);
+        else if (Array.isArray(w.selectedTables)) w.selectedTables = w.selectedTables.filter(x => x !== t);
+        if (w.tablePositions) delete w.tablePositions[t];
+        w.fkList = (w.fkList || []).filter(f => f.child !== t && f.parent !== t);
+      }
+    });
+  });
+
+  if (window._liveSchema && window._liveSchema.tablesData) {
+    window._liveSchema.tableCount = Object.keys(window._liveSchema.tablesData).length;
+    window._liveSchema.fkCount = (window._liveSchema.fkList || []).length;
+  }
+
+  fetch('/api/schema/mutate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'drop_tables', params: { tables: targets } })
+  }).catch(() => {});
+
+  renderFilterChips();
+  updateSubsysFilterOptions();
+  buildSidebarList();
+  renderAll();
+  updateVisibleStats();
+  if (typeof updateStatusBar === 'function') updateStatusBar();
+  _saveWorkspacesLocal();
+  scheduleAutoSave();
+  showToast(isRTL ? `تم حذف ${targets.length} جداول نهائياً` : `Permanently deleted ${targets.length} tables`);
+}
+
+function deleteTableAction(tableName, mode) {
+  const t = (tableName || '').toUpperCase().trim();
+  if (!t) return;
+  const isRTL = currentLang === 'ar';
+  const isPermanent = (mode === 'permanent');
+
+  // 1. Remove from local variables of active workspace
+  delete tablesData[t];
+  allTables = allTables.filter(x => x !== t);
+  comTables = comTables.filter(x => x !== t);
+  rafTables = rafTables.filter(x => x !== t);
+  selectedTables.delete(t);
+  selectedTableNodes.delete(t);
+  delete tablePositions[t];
+  delete tableCustomHiddenCols[t];
+  fkList = fkList.filter(f => f.child !== t && f.parent !== t);
+
+  // 2. Update active workspace object
+  const curWs = workspaces.find(w => w.id === activeWorkspaceId);
+  if (curWs) {
+    _captureCurrentInto(curWs);
+  }
+
+  // 3. If permanent, remove from _liveSchema, all workspaces, and SQLite backend
+  if (isPermanent) {
+    if (window._liveSchema && window._liveSchema.tablesData) {
+      delete window._liveSchema.tablesData[t];
+      window._liveSchema.fkList = (window._liveSchema.fkList || []).filter(f => f.child !== t && f.parent !== t);
+      window._liveSchema.tableCount = Object.keys(window._liveSchema.tablesData).length;
+      window._liveSchema.fkCount = window._liveSchema.fkList.length;
+    }
+    workspaces.forEach(w => {
+      if (w.tablesData && w.tablesData[t]) {
+        delete w.tablesData[t];
+        w.allTables = (w.allTables || []).filter(x => x !== t);
+        w.comTables = (w.comTables || []).filter(x => x !== t);
+        w.rafTables = (w.rafTables || []).filter(x => x !== t);
+        if (w.selectedTables instanceof Set) w.selectedTables.delete(t);
+        else if (Array.isArray(w.selectedTables)) w.selectedTables = w.selectedTables.filter(x => x !== t);
+        if (w.tablePositions) delete w.tablePositions[t];
+        w.fkList = (w.fkList || []).filter(f => f.child !== t && f.parent !== t);
+      }
+    });
+
+    fetch('/api/schema/mutate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'drop_table', params: { table: t } })
+    }).catch(err => console.error("Error mutating schema on backend:", err));
+  }
+
+  // 4. Update UI
+  renderFilterChips();
+  updateSubsysFilterOptions();
+  buildSidebarList();
+  renderAll();
+  updateVisibleStats();
+  if (typeof updateStatusBar === 'function') updateStatusBar();
+  _saveWorkspacesLocal();
+  scheduleAutoSave();
+
+  const msg = isPermanent
+    ? (isRTL ? `تم حذف جدول ${t} نهائياً من التطبيق وقاعدة البيانات` : `Permanently deleted table ${t} from application`)
+    : (isRTL ? `تم حذف جدول ${t} من هذا التبويب` : `Removed table ${t} from current tab`);
+  showToast(msg);
+}
+
+function confirmClearCurrentTab() {
+  const isRTL = currentLang === 'ar';
+  const msg = isRTL
+    ? 'هل أنت متأكد من تفريغ كافة الجداول من هذا التبويب؟\n(لن يؤثر على قاعدة البيانات أو التبويبات الأخرى)'
+    : 'Are you sure you want to clear all tables from this tab?\n(Will not affect database or other tabs)';
+  if (!confirm(msg)) return;
+
+  tablesData = {};
+  fkList = [];
+  allTables = [];
+  comTables = [];
+  rafTables = [];
+  selectedTables.clear();
+  selectedTableNodes.clear();
+  tablePositions = {};
+  tableCustomHiddenCols = {};
+
+  const curWs = workspaces.find(w => w.id === activeWorkspaceId);
+  if (curWs) {
+    curWs.source = 'blank';
+    _captureCurrentInto(curWs);
+  }
+
+  renderFilterChips();
+  updateSubsysFilterOptions();
+  buildSidebarList();
+  renderAll();
+  updateVisibleStats();
+  _saveWorkspacesLocal();
+  showToast(isRTL ? 'تم تفريغ كافة الجداول من هذا التبويب' : 'Cleared all tables from tab');
+}
+
+async function confirmClearAllPermanently() {
+  const isRTL = currentLang === 'ar';
+  const msg = isRTL
+    ? 'تحذير هام: هل أنت متأكد من حذف وتفريغ كافة الجداول ومصدر البيانات نهائياً من التطبيق وقاعدة البيانات؟\nسيتم مسح كافة الجداول والمخطط المخزن، ويصبح التطبيق نظيفاً تماماً.'
+    : 'Warning: Are you sure you want to permanently clear all tables and data source from the application and database?\nThis will permanently delete all cached schema data!';
+  if (!confirm(msg)) return;
+
+  tablesData = {};
+  fkList = [];
+  allTables = [];
+  comTables = [];
+  rafTables = [];
+  selectedTables.clear();
+  selectedTableNodes.clear();
+  tablePositions = {};
+  tableCustomHiddenCols = {};
+  subsystemData = null;
+  subsystemMapping = {};
+  window._liveSchema = null;
+
+  workspaces = [_wsObj(0, {
+    name: isRTL ? 'مخطط فارغ 1' : 'Blank Canvas 1',
+    source: 'blank',
+    tablesData: {},
+    fkList: [],
+    allTables: [],
+    comTables: [],
+    rafTables: [],
+    selectedTables: new Set(),
+    selectedTableNodes: new Set(),
+    tablePositions: {},
+    tableCustomHiddenCols: {},
+    subsystemData: null,
+    subsystemMapping: {},
+    viewMode: 'no-audit',
+    zoom: 0.85,
+    dialect: window.currentDialect || 'oracle'
+  })];
+  activeWorkspaceId = 0;
+
+  try {
+    await fetch('/api/schema/clear', { method: 'POST' });
+  } catch(e) {}
+
+  _applyWorkspaceToGlobal(workspaces[0]);
+  renderFilterChips();
+  updateSubsysFilterOptions();
+  buildSidebarList();
+  renderLegend();
+  renderAll();
+  renderWsBar();
+  updateVisibleStats();
+  _saveWorkspacesLocal();
+  await refreshCurrentSchemaInfo();
+  showToast(isRTL ? 'تم حذف وتفريغ مصدر البيانات نهائياً' : 'Data source permanently cleared');
+}
+window.confirmClearCurrentSchema = confirmClearAllPermanently;
+
+
+// Table Context Menu Functions
+function showTableContextMenu(e, tableName) {
+  activeContextMenuTable = tableName;
+  const menu = document.getElementById('tableContextMenu');
+  if (!menu) return;
+  const title = document.getElementById('ctxMenuTableTitle');
+  if (title) title.textContent = tableName;
+
+  menu.style.display = 'block';
+  const menuW = 210;
+  const menuH = 160;
+  const winW = window.innerWidth;
+  const winH = window.innerHeight;
+
+  let left = e.clientX;
+  let top = e.clientY;
+  if (left + menuW > winW) left = winW - menuW - 10;
+  if (top + menuH > winH) top = winH - menuH - 10;
+  if (left < 10) left = 10;
+  if (top < 10) top = 10;
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function hideTableContextMenu() {
+  const menu = document.getElementById('tableContextMenu');
+  if (menu) menu.style.display = 'none';
+  activeContextMenuTable = null;
+}
+
+function handleCtxInspect() {
+  const t = activeContextMenuTable;
+  hideTableContextMenu();
+  if (t) openColumnModalFor(t);
+}
+
+function handleCtxHide() {
+  const t = activeContextMenuTable;
+  hideTableContextMenu();
+  if (t) {
+    selectedTables.delete(t);
+    selectedTableNodes.delete(t);
+    updateVisibleStats();
+    renderAll();
+    scheduleAutoSave();
+    renderFilterChips();
+    updateSubsysFilterOptions();
+    buildSidebarList();
+    showToast(currentLang === 'ar' ? `تم إخفاء ${t} من المخطط` : `Hidden ${t} from canvas`);
+  }
+}
+
+function handleCtxCopyName() {
+  const t = activeContextMenuTable;
+  hideTableContextMenu();
+  if (t) {
+    navigator.clipboard.writeText(t).then(() => {
+      showToast(currentLang === 'ar' ? `تم نسخ اسم الجدول: ${t}` : `Copied table name: ${t}`);
+    }).catch(() => {});
+  }
+}
+
+function handleCtxDelete() {
+  const t = activeContextMenuTable;
+  hideTableContextMenu();
+  if (t) confirmDeleteTable(t);
+}
+
+// Global click & keydown listeners for context menu and delete modal
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('tableContextMenu');
+  if (menu && menu.style.display !== 'none' && !menu.contains(e.target)) {
+    hideTableContextMenu();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    hideTableContextMenu();
+    closeDeleteTableModal();
+  }
+});
+
+// Expose handlers on window for inline event listeners
+window.confirmDeleteTable = confirmDeleteTable;
+window.closeDeleteTableModal = closeDeleteTableModal;
+window.executePendingDelete = executePendingDelete;
+window.confirmDeleteCurrentModalTable = confirmDeleteCurrentModalTable;
+window.deleteSelectedTableFromBar = deleteSelectedTableFromBar;
+window.deleteMultiSelectedTablesFromBar = deleteMultiSelectedTablesFromBar;
+window.deleteTableAction = deleteTableAction;
+window.confirmClearCurrentTab = confirmClearCurrentTab;
+window.confirmClearAllPermanently = confirmClearAllPermanently;
+window.showTableContextMenu = showTableContextMenu;
+window.hideTableContextMenu = hideTableContextMenu;
+window.handleCtxInspect = handleCtxInspect;
+window.handleCtxHide = handleCtxHide;
+window.handleCtxCopyName = handleCtxCopyName;
+window.handleCtxDelete = handleCtxDelete;
 
 function applyLanguage(lang) {
   try {
@@ -1619,6 +2213,35 @@ function applyLanguage(lang) {
     setText('i18n-keyDragTable', isAr ? 'سحب الجدول' : 'Drag Table');
     setText('i18n-keyMouseWheel', isAr ? 'عجلة الفأرة' : 'Mouse Wheel');
     setText('i18n-keyMouseDrag', isAr ? 'سحب بالفأرة' : 'Drag Mouse');
+    setText('i18n-modalDeleteTable', isAr ? 'حذف الجدول نهائياً' : 'Delete Table');
+    setText('i18n-barDeleteText', isAr ? 'حذف' : 'Delete');
+    setText('i18n-barMultiDeleteText', isAr ? 'حذف المحدّد' : 'Delete Selected');
+    setText('i18n-ctxInspect', isAr ? 'تفاصيل وتخصيص الحقول' : 'Inspect Columns');
+    setText('i18n-ctxHide', isAr ? 'إخفاء من المخطط' : 'Hide from Canvas');
+    setText('i18n-ctxCopy', isAr ? 'نسخ اسم الجدول' : 'Copy Table Name');
+    setText('i18n-ctxDelete', isAr ? 'حذف الجدول نهائياً...' : 'Delete Table Permanently...');
+    setText('deleteModalTitle', isAr ? 'حذف الجدول' : 'Delete Table');
+    setText('deleteModalSubtitle', isAr ? 'اختر نطاق الحذف المناسب لهذا الجدول' : 'Choose deletion scope for this table');
+    setText('i18n-delScopeTabTitle', isAr ? 'حذف من هذا التبويب فقط' : 'Remove from this tab only');
+    setText('i18n-delScopeTabDesc', isAr ? 'يتم حذف الجدول وعلاقاته من مساحة العمل الحالية فقط، ويبقى محفوظاً في قاعدة البيانات والتبويبات الأخرى.' : 'Remove table and relationships from current tab only; preserved in database & other tabs.');
+    setText('i18n-delScopePermTitle', isAr ? 'حذف نهائي من التطبيق وقاعدة البيانات' : 'Permanently delete from application & database');
+    setText('i18n-delScopePermDesc', isAr ? 'حذف قطعي ودائم للجدول وعلاقاته من ذاكرة التطبيق وقاعدة بيانات SQLite وكافة التبويبات نهائياً.' : 'Permanent deletion from SQLite database, app memory, and all workspaces.');
+    setText('i18n-delCancelBtn', isAr ? 'إلغاء' : 'Cancel');
+    setText('i18n-delConfirmBtnText', isAr ? 'تأكيد الحذف' : 'Confirm Deletion');
+    setText('i18n-clearSchemaBtn', isAr ? 'حذف وتفريغ هذا المصدر نهائياً' : 'Clear Schema Permanently');
+    setText('i18n-oracleModalTitle', isAr ? 'اتصال مباشر بقاعدة البيانات' : 'Live Database Connection');
+    setText('i18n-oracleModalSub', isAr ? 'جلب المخطط والجداول مباشرة في صفحة جديدة من قاعدة البيانات المتصلة' : 'Fetch live schema into a new page directly from connected database');
+    setText('i18n-modalDbDialect', isAr ? 'المحرك / نوع قاعدة البيانات' : 'Engine / Dialect');
+    setText('i18n-modalDbHost', isAr ? 'المضيف (Host)' : 'Host');
+    setText('i18n-modalDbPort', isAr ? 'المنفذ (Port)' : 'Port');
+    setText('i18n-modalDbService', isAr ? 'اسم الخدمة / قاعدة البيانات (Service Name / DB)' : 'Service Name / Database');
+    setText('i18n-modalDbUser', isAr ? 'اسم المستخدم (Username)' : 'Username');
+    setText('i18n-modalDbPass', isAr ? 'كلمة المرور (Password)' : 'Password');
+    setText('i18n-modalDbFile', isAr ? 'مسار ملف SQLite (على الخادم)' : 'SQLite file path (on server)');
+    setText('i18n-modalDbSetDefault', isAr ? 'تعيين كمصدر أساسي وحفظ بيانات الاتصال في التطبيق' : 'Set as default schema and save connection');
+    updateBtnText('i18n-modalDbTestBtn', isAr ? 'اختبار الاتصال' : 'Test Connection');
+    updateBtnText('i18n-modalDbCancelBtn', isAr ? 'إلغاء' : 'Cancel');
+    updateBtnText('i18n-modalDbConnectBtn', isAr ? 'اتصال وجلب المخطط' : 'Connect & Fetch Schema');
     if (typeof updateRoutingModeUI === 'function') updateRoutingModeUI();
     if (typeof renderSubsystemClusters === 'function') renderSubsystemClusters();
     if (document.getElementById('i18n-pasteModalTitle') && t.pasteModalTitle) document.getElementById('i18n-pasteModalTitle').textContent = t.pasteModalTitle;
@@ -2022,8 +2645,17 @@ function buildSidebarList() {
         <input type="checkbox" value="${t}" ${isChecked ? 'checked' : ''} />
         <span class="tree-name">${t}</span>
         <span class="tree-badge">${data.columns ? data.columns.length : 0}</span>
-        <span class="tree-gear" title="Manage Columns"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span class="tree-gear" title="${isAr ? 'تخصيص الحقول' : 'Manage Columns'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span class="tree-trash" title="${isAr ? 'حذف الجدول نهائياً' : 'Delete Table'}" onclick="event.stopPropagation(); confirmDeleteTable('${t}');">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </span>
       `;
+
+      itemDiv.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showTableContextMenu(e, t);
+      };
 
       itemDiv.querySelector('.tree-name').onclick = (e) => handleSidebarItemClick(t, e);
       itemDiv.querySelector('.tree-gear').onclick = (e) => {
@@ -3599,6 +4231,11 @@ function renderTables() {
       e.stopPropagation();
       openColumnModalFor(t);
     });
+    g.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showTableContextMenu(e, t);
+    });
 
     layer.appendChild(g);
   });
@@ -4291,6 +4928,7 @@ function hideAllSelectedTables() {
 
 // COLUMN MANAGER MODAL DIALOG
 function openColumnModalFor(tableName) {
+  currentModalTable = tableName;
   selectedTableNodes.clear();
   selectedTableNodes.add(tableName);
   updateSelectionUI(); if (typeof updateStatusBar === 'function') updateStatusBar();
@@ -5244,12 +5882,25 @@ async function refreshCurrentSchemaInfo() {
     const data = await res.json();
     const cur = data.current || {};
     const label = { oracle: 'Oracle', mysql: 'MySQL', postgres: 'PostgreSQL', mssql: 'SQL Server', sqlite_file: 'SQLite' }[cur.dialect] || cur.dialect;
-    const src = cur.source === 'sql' ? 'SQL Import' : label;
+    const btnClear = document.getElementById('btnClearCurrentSchema');
     const s = await (await fetch('/api/schema')).json();
- const name = s.schemaName ? `\n ${s.schemaName}` : '';
- el.textContent = `${src}${name}\n ${s.tableCount} tables • ${s.fkCount} FKs • ${(s.lastSync || '').slice(0, 19)}`;
+    if (!s || !s.tablesData || Object.keys(s.tablesData).length === 0 || s.tableCount === 0) {
+      el.className = 'db-test-result neutral';
+      el.textContent = currentLang === 'ar'
+        ? '⚪ لا يوجد مصدر بيانات أو مخطط محمل حالياً (فارغ تماماً)\nيمكنك الاتصال بقاعدة بيانات أوراكل أو استيراد ملف SQL / Excel للبدء.'
+        : '⚪ No data source or schema loaded (Clean state)\nConnect to Oracle or import a SQL/Excel file to start.';
+      if (btnClear) btnClear.style.display = 'none';
+      return;
+    }
+    el.className = 'db-test-result ok';
+    const name = s.schemaName ? `\n${s.schemaName}` : '';
+    el.textContent = `${src}${name}\n${s.tableCount} tables • ${s.fkCount} FKs • ${(s.lastSync || '').slice(0, 19)}`;
+    if (btnClear) btnClear.style.display = 'inline-flex';
   } catch (e) {
+    el.className = 'db-test-result neutral';
     el.textContent = currentLang === 'ar' ? '—' : '—';
+    const btnClear = document.getElementById('btnClearCurrentSchema');
+    if (btnClear) btnClear.style.display = 'none';
   }
 }
 
@@ -5456,8 +6107,12 @@ async function dictionaryFromCode(sql) {
 async function runQuickAction(action) {
   try {
     switch (action) {
+      case 'new_blank': createPageBlank(); break;
+      case 'clear_tab': confirmClearCurrentTab(); break;
+      case 'clear_all_perm': await confirmClearAllPermanently(); break;
       case 'audit_linter': switchView('audit'); switchAuditTab('linter'); await runSchemaLint(); break;
       case 'audit_diff': switchView('audit'); switchAuditTab('diff'); break;
+      case 'audit_convert': switchView('audit'); switchAuditTab('convert'); break;
       case 'audit_mock': switchView('audit'); switchAuditTab('mock'); break;
       case 'report_html': await exportInteractiveHtmlReport(); break;
       case 'report_pdf': await exportExecutivePdfReport(); break;
@@ -6452,7 +7107,7 @@ let diffMigrationMode = 'forward'; // 'forward' or 'rollback'
 
 function switchAuditTab(tabId) {
   currentAuditTab = tabId;
-  ['linter', 'diff', 'mock'].forEach(function(t) {
+  ['linter', 'diff', 'mock', 'convert'].forEach(function(t) {
     const btn = document.getElementById('auditTab' + t.charAt(0).toUpperCase() + t.slice(1));
     const panel = document.getElementById('panel-audit-' + t);
     if (btn) btn.classList.toggle('active', t === tabId);
@@ -7056,6 +7711,106 @@ function downloadMockDataScript() {
   const blob = new Blob([editor.value], { type: 'text/sql;charset=utf-8;' });
   downloadQuickBlob(blob, 'mock_data_' + dialect + '_' + Date.now() + '.sql');
   showToast(currentLang === 'ar' ? '💾 تم تنزيل سكربت البيانات التجريبية' : '💾 Mock data script downloaded');
+}
+
+// ------------------------- 4. SQL DIALECT TRANSPILER -------------------------
+
+async function loadCurrentDiagramToTranspiler() {
+  const isRTL = currentLang === 'ar';
+  try {
+    showToast(isRTL ? '⏳ جاري استخراج كود المخطط الحالي...' : '⏳ Extracting active diagram SQL...');
+    const ddlRes = await requestCurrentSchemaExport('oracle', true);
+    const data = await ddlRes.json();
+    if (!data.success) throw new Error(data.error || 'Failed to extract SQL');
+    const input = document.getElementById('transpileSqlInput');
+    if (input) {
+      input.value = data.script;
+      showToast(isRTL ? '📥 تم استيراد كود المخطط إلى المحول' : '📥 Loaded diagram SQL into transpiler');
+    }
+  } catch (err) {
+    showToast('❌ ' + err.message);
+  }
+}
+
+async function runSqlTranspiler() {
+  const isRTL = currentLang === 'ar';
+  const sqlInput = document.getElementById('transpileSqlInput');
+  const targetSel = document.getElementById('transpileTargetDialect');
+  const dropCb = document.getElementById('transpileDropCb');
+  const resultArea = document.getElementById('transpileSqlOutput');
+  const statsBox = document.getElementById('transpileStats');
+  const container = document.getElementById('transpileResultsContainer');
+
+  const text = (sqlInput?.value || '').trim();
+  if (!text) {
+    showToast(isRTL ? '⚠️ يرجى لصق أو استيراد كود DDL للتحويل' : '⚠️ Please enter SQL text to convert');
+    return;
+  }
+  showToast(isRTL ? '⏳ جاري تحليل وتحويل كود SQL...' : '⏳ Transpiling SQL dialect...');
+  try {
+    const res = await fetch('/api/sql/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sql: text,
+        target_dialect: targetSel?.value || 'postgres',
+        include_drop: dropCb?.checked ?? true
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.detail || data.error || 'Conversion failed');
+    }
+    window.__lastTranspileResult = data;
+    if (resultArea) {
+      resultArea.value = data.convertedSql;
+    }
+    if (container) {
+      container.style.display = 'block';
+    }
+    if (statsBox) {
+      statsBox.innerHTML = 
+        '<span style="padding:2px 8px; border-radius:12px; background:rgba(37,99,235,0.15); color:var(--accent); font-weight:700;">المصدر المكتشف: ' + (data.sourceDialect || 'SQL').toUpperCase() + '</span>' +
+        '<span style="padding:2px 8px; border-radius:12px; background:rgba(16,185,129,0.15); color:#10b981; font-weight:700;">الهدف: ' + (data.targetDialect || 'SQL').toUpperCase() + '</span>' +
+        '<span style="color:var(--text-muted);">' + data.tableCount + ' جدول · ' + data.fkCount + ' علاقة</span>';
+    }
+    showToast(isRTL ? '✅ تم التحويل بنجاح إلى ' + data.targetDialect.toUpperCase() : '✅ Transpiled to ' + data.targetDialect.toUpperCase());
+  } catch(err) {
+    showToast('❌ ' + err.message);
+  }
+}
+
+function copyTranspiledSql() {
+  const area = document.getElementById('transpileSqlOutput');
+  if (!area || !area.value) return;
+  navigator.clipboard.writeText(area.value).then(function() {
+    showToast(currentLang === 'ar' ? '📋 تم نسخ كود SQL المحول' : '📋 Transpiled SQL copied');
+  });
+}
+
+function downloadTranspiledSql() {
+  const area = document.getElementById('transpileSqlOutput');
+  if (!area || !area.value) return;
+  const target = (document.getElementById('transpileTargetDialect')?.value || 'sql');
+  const blob = new Blob([area.value], { type: 'text/sql;charset=utf-8;' });
+  downloadQuickBlob(blob, 'transpiled_' + target + '_' + Date.now() + '.sql');
+  showToast(currentLang === 'ar' ? '💾 تم تنزيل سكربت SQL' : '💾 Transpiled SQL downloaded');
+}
+
+function openTranspiledInNewTab() {
+  const data = window.__lastTranspileResult;
+  if (!data || !data.schema || !data.schema.tablesData) {
+    showToast(currentLang === 'ar' ? '⚠️ يرجى تحويل الكود أولاً' : '⚠️ Please transpile SQL first');
+    return;
+  }
+  const isRTL = currentLang === 'ar';
+  createWorkspaceFromPayload({
+    name: (isRTL ? 'مخطط ' : 'Transpiled ') + data.targetDialect.toUpperCase(),
+    source: 'sql',
+    schema: data.schema
+  });
+  switchView('canvas');
+  showToast(isRTL ? '🚀 تم فتح المخطط المحول في تبويب جديد' : '🚀 Opened transpiled schema in new tab');
 }
 
 
